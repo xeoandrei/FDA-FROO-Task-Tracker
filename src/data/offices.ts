@@ -1,0 +1,232 @@
+import { FrooOffice, FrooUserPersona } from '../types/task';
+
+export const FROO_OFFICES: FrooOffice[] = [
+  {
+    id: 'oddg-froo',
+    code: 'ODDG-FROO',
+    name: 'Office of the Deputy Director General for Field Regulatory Operations Office (ODDG-FROO)',
+    shortLabel: 'ODDG-FROO',
+    coverage: 'National / Field Regulatory Operations Headquarters',
+    defaultPersonnel: ['Atty. Ton', 'Director Oscar Rivera', 'Engr. Liza Reyes', 'Atty. Michael Ramos'],
+  },
+  {
+    id: 'region-ncr',
+    code: 'NCR',
+    name: 'Region NCR',
+    shortLabel: 'NCR',
+    coverage: 'Metro Manila (National Capital Region)',
+    defaultPersonnel: ['Juan Dela Cruz', 'Camille Bautista', 'Mark Anthony Torres', 'Dr. Patricia Lee'],
+  },
+  {
+    id: 'region-car',
+    code: 'CAR',
+    name: 'Region CAR',
+    shortLabel: 'Region CAR',
+    coverage: 'Cordillera Administrative Region (Baguio, Benguet, Abra, etc.)',
+    defaultPersonnel: ['Denver Lang-ay', 'Bernadette Chawi', 'Aileen Balisong'],
+  },
+  {
+    id: 'region-1',
+    code: 'Region 1',
+    name: 'Region 1',
+    shortLabel: 'Region 1',
+    coverage: 'Ilocos Region (Ilocos Norte, Sur, La Union, Pangasinan)',
+    defaultPersonnel: ['Rodrigo Valdez', 'Clarisse Naval', 'Edgardo Singson'],
+  },
+  {
+    id: 'region-2',
+    code: 'Region 2',
+    name: 'Region 2',
+    shortLabel: 'Region 2',
+    coverage: 'Cagayan Valley (Batanes, Cagayan, Isabela, Nueva Vizcaya, Quirino)',
+    defaultPersonnel: ['Marlon Taguba', 'Grace Pagulayan', 'Nestor Domingo'],
+  },
+  {
+    id: 'region-3',
+    code: 'Region 3',
+    name: 'Region 3',
+    shortLabel: 'Region 3',
+    coverage: 'Central Luzon (Bulacan, Pampanga, Tarlac, Nueva Ecija, Bataan, Zambales, Aurora)',
+    defaultPersonnel: ['Ana Garcia', 'Carlos Mendoza', 'Rowena Santos', 'Ferdinand Pineda'],
+  },
+  {
+    id: 'region-4a',
+    code: 'Region 4A',
+    name: 'Region 4A',
+    shortLabel: 'Region 4A',
+    coverage: 'CALABARZON (Cavite, Laguna, Batangas, Rizal, Quezon)',
+    defaultPersonnel: ['Maria Santos', 'Ronaldo Castillo', 'Krizza Mae Hernandez', 'Jerome Alcantara'],
+  },
+  {
+    id: 'region-4b',
+    code: 'Region 4B',
+    name: 'Region 4B',
+    shortLabel: 'Region 4B',
+    coverage: 'MIMAROPA (Mindoro, Marinduque, Romblon, Palawan)',
+    defaultPersonnel: ['Reynaldo Manalo', 'Joanne Abad', 'Vincent Flores'],
+  },
+  {
+    id: 'region-5',
+    code: 'Region 5',
+    name: 'Region 5',
+    shortLabel: 'Region 5',
+    coverage: 'Bicol Region (Albay, Camarines Norte/Sur, Catanduanes, Masbate, Sorsogon)',
+    defaultPersonnel: ['Salvador Imperial', 'Melanie Belmonte', 'Gemma Bobis'],
+  },
+  {
+    id: 'region-6',
+    code: 'Region 6',
+    name: 'Region 6',
+    shortLabel: 'Region 6',
+    coverage: 'Western Visayas (Iloilo, Negros Occidental, Aklan, Antique, Capiz, Guimaras)',
+    defaultPersonnel: ['Francis Jalandoni', 'Riza De la Torre', 'Arnel Montinola'],
+  },
+  {
+    id: 'region-7',
+    code: 'Region 7',
+    name: 'Region 7',
+    shortLabel: 'Region 7',
+    coverage: 'Central Visayas (Cebu, Bohol, Negros Oriental, Siquijor)',
+    defaultPersonnel: ['Pedro Reyes', 'Sheila Cabarrubias', 'Lorenzo Tan', 'Giselle Yu'],
+  },
+  {
+    id: 'region-8',
+    code: 'Region 8',
+    name: 'Region 8',
+    shortLabel: 'Region 8',
+    coverage: 'Eastern Visayas (Leyte, Samar, Biliran, Southern Leyte)',
+    defaultPersonnel: ['Eduardo Romualdez', 'Liezel Cinco', 'Kenneth Montejo'],
+  },
+  {
+    id: 'region-9',
+    code: 'Region 9',
+    name: 'Region 9',
+    shortLabel: 'Region 9',
+    coverage: 'Zamboanga Peninsula (Zamboanga del Norte, Sur, Sibugay, Zamboanga City)',
+    defaultPersonnel: ['Hasanuddin Alih', 'Marissa Climaco', 'Joel Wee'],
+  },
+  {
+    id: 'region-10',
+    code: 'Region 10',
+    name: 'Region 10',
+    shortLabel: 'Region 10',
+    coverage: 'Northern Mindanao (Bukidnon, Camiguin, Lanao del Norte, Misamis Occ/Or)',
+    defaultPersonnel: ['Gilbert Moreno', 'Evelyn Pelaez', 'Dennis Neri'],
+  },
+  {
+    id: 'region-11',
+    code: 'Region 11',
+    name: 'Region 11',
+    shortLabel: 'Region 11',
+    coverage: 'Davao Region (Davao City, del Sur, del Norte, Oriental, Occidental, de Oro)',
+    defaultPersonnel: ['Corazon Dalisay', 'Paolo Duterte-Lim', 'Myrna Quizon'],
+  },
+  {
+    id: 'region-12-barmm',
+    code: 'Region 12 / BARMM',
+    name: 'Region 12 / BARMM',
+    shortLabel: 'Region 12 / BARMM',
+    coverage: 'SOCCSKSARGEN & Bangsamoro Autonomous Region in Muslim Mindanao',
+    defaultPersonnel: ['Amina Macacua', 'Datu Rashid Ampatuan', 'Norhata Pendatun', 'Franklin Guinto'],
+  },
+  {
+    id: 'region-13',
+    code: 'Region 13',
+    name: 'Region 13',
+    shortLabel: 'Region 13',
+    coverage: 'Caraga Region (Agusan del Norte/Sur, Surigao del Norte/Sur, Dinagat Islands)',
+    defaultPersonnel: ['Leopoldo Plaza', 'Clarita Amante', 'Rolando Curato'],
+  },
+];
+
+export const CATEGORIES = [
+  'Inspection',
+  'Investigation',
+  'Referral',
+  'Report',
+  'Post-Marketing Surveillance',
+  'Licensing & Compliance',
+  'Product Recall & Seizure',
+  'Consumer Complaint',
+];
+
+export const ORIGINS = [
+  'FROO',
+  'ODDG-FROO',
+  'Regional Office',
+  'External',
+  'DOH Central Office',
+  'Inter-Agency / BOC / PNP',
+  'Consumer Complaint',
+];
+
+export const PRIORITIES: ('Low' | 'Medium' | 'High' | 'Urgent')[] = [
+  'Low',
+  'Medium',
+  'High',
+  'Urgent',
+];
+
+export const STATUSES: ('Open' | 'In Progress' | 'Completed' | 'Overdue')[] = [
+  'Open',
+  'In Progress',
+  'Completed',
+  'Overdue',
+];
+
+export const OUTCOMES = [
+  'Scheduled',
+  'In Progress',
+  'Compliant - Passed',
+  'Non-Compliant - Notice of Violation Issued',
+  'For Re-Inspection',
+  'Investigation Report Submitted',
+  'Endorsed to Legal / Prosecution',
+  'Products Confiscated / Padlocked',
+  'Closed / Resolved',
+];
+
+export const DEFAULT_PERSONAS: FrooUserPersona[] = [
+  {
+    name: 'Atty. Ton',
+    role: 'Lead Regulatory Enforcement Officer',
+    officeId: 'oddg-froo',
+    officeName: 'ODDG-FROO',
+    email: 'atty.ton@fda.gov.ph',
+  },
+  {
+    name: 'Juan Dela Cruz',
+    role: 'Senior Food & Drug Regulation Officer',
+    officeId: 'region-ncr',
+    officeName: 'Region NCR',
+    email: 'jdelacruz@fda.gov.ph',
+  },
+  {
+    name: 'Maria Santos',
+    role: 'Regional Field Regulatory Inspector',
+    officeId: 'region-4a',
+    officeName: 'Region 4A',
+    email: 'msantos@fda.gov.ph',
+  },
+  {
+    name: 'Carlos Mendoza',
+    role: 'Field Investigation Officer',
+    officeId: 'region-3',
+    officeName: 'Region 3',
+    email: 'cmendoza@fda.gov.ph',
+  },
+  {
+    name: 'Pedro Reyes',
+    role: 'Regional Regulatory Supervisor',
+    officeId: 'region-7',
+    officeName: 'Region 7',
+    email: 'preyes@fda.gov.ph',
+  },
+  {
+    name: 'Amina Macacua',
+    role: 'Regulatory Operations Coordinator',
+    officeId: 'region-12-barmm',
+    officeName: 'Region 12 / BARMM',
+    email: 'amacacua@fda.gov.ph',
+  },
+];

@@ -1,0 +1,6 @@
+{
+  "name": "FROO Task Tracking System",
+  "description": "Operational task tracking, assignment, and activity history for the FDA Field Regulatory Operations Office and Regional Field Offices.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
