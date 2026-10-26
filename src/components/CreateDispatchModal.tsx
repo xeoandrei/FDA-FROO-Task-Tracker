@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Calendar, FileText, CheckSquare, ShieldCheck, Car, UserCheck, AlertCircle, RotateCcw, CheckCircle } from 'lucide-react';
-import { Task, DispatchSlip } from '../types/task';
+import {
+  X,
+  Plus,
+  Trash2,
+  Calendar,
+  FileText,
+  CheckSquare,
+  ShieldCheck,
+  Car,
+  UserCheck,
+  AlertCircle,
+  RotateCcw,
+  CheckCircle,
+  HelpCircle,
+} from 'lucide-react';
+import { Task, DispatchSlip, DispatchStatus } from '../types/task';
+import { UserAccount } from '../types/auth';
 import { generateDispatchControlNumber } from '../utils/dispatchNumber';
 import { getStoredTasks } from '../utils/storage';
 
@@ -11,6 +26,7 @@ interface CreateDispatchModalProps {
   task: Task;
   existingSlip?: DispatchSlip | null;
   allTasks?: Task[];
+  currentUser?: UserAccount | null;
 }
 
 export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
@@ -20,6 +36,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   task,
   existingSlip,
   allTasks = [],
+  currentUser,
 }) => {
   // Use tasks from props or fallback to localStorage
   const taskRegistry = allTasks && allTasks.length > 0 ? allTasks : getStoredTasks();
@@ -30,7 +47,6 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
 
   // Compute auto-generated sequence control number based on region, year, and dispatches so far
   const initialAutoCtrl = generateDispatchControlNumber(task.region, dispatchDate, taskRegistry);
-
   const [ctrlNo, setCtrlNo] = useState(
     existingSlip?.ctrlNo || initialAutoCtrl.ctrlNo
   );
@@ -67,24 +83,50 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   const [driver, setDriver] = useState(existingSlip?.driver || 'HANNIBAL C. ECOBEN');
   const [vehiclePlateNumber, setVehiclePlateNumber] = useState(existingSlip?.vehiclePlateNumber || 'AVANZA SAB 9141');
 
-  // Retain requested officials by default as instructed
+  // Officials recommendation & approval defaults based on roles
+  const defaultRecommendedName = currentUser?.role === 'RANK_AND_FILE'
+    ? `${currentUser.firstName.toUpperCase()} ${currentUser.middleInitial ? currentUser.middleInitial.toUpperCase() + ' ' : ''}${currentUser.lastName.toUpperCase()}`
+    : 'GOMEL C. GABUNA, LLB, MDM, CESE';
+
+  const defaultRecommendedTitle = currentUser?.role === 'RANK_AND_FILE'
+    ? `${currentUser.position}, ${currentUser.office}`
+    : 'Executive Assistant Designate for FROO, Director II, NLC';
+
+  const defaultApprovedName = currentUser?.role === 'RANK_AND_FILE'
+    ? 'REGIONAL SUPERVISOR'
+    : 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
+
+  const defaultApprovedTitle = currentUser?.role === 'RANK_AND_FILE'
+    ? `Regional Regulatory Enforcement Supervisor - ${task.region}`
+    : 'Deputy Director General - Field Regulatory Operations Office';
+
   const [recommendedByName, setRecommendedByName] = useState(
-    existingSlip?.recommendedBy.name || 'GOMEL C. GABUNA, LLB, MDM, CESE'
+    existingSlip?.recommendedBy.name || defaultRecommendedName
   );
   const [recommendedByTitle, setRecommendedByTitle] = useState(
-    existingSlip?.recommendedBy.title || 'Executive Assistant Designate for FROO, Director II, NLC'
+    existingSlip?.recommendedBy.title || defaultRecommendedTitle
   );
-
   const [approvedByName, setApprovedByName] = useState(
-    existingSlip?.approvedBy.name || 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV'
+    existingSlip?.approvedBy.name || defaultApprovedName
   );
   const [approvedByTitle, setApprovedByTitle] = useState(
-    existingSlip?.approvedBy.title || 'Deputy Director General - Field Regulatory Operations Office'
+    existingSlip?.approvedBy.title || defaultApprovedTitle
   );
 
-  const [status, setStatus] = useState<'Draft' | 'Approved' | 'Dispatched'>(
-    existingSlip?.status || 'Approved'
-  );
+  // Status computation based on user role and hierarchy
+  const determineInitialStatus = (): DispatchStatus => {
+    if (existingSlip?.status) return existingSlip.status;
+    if (!currentUser) return 'Pending Regional Supervisor Approval';
+    if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') {
+      return 'Approved';
+    }
+    if (currentUser.role === 'CLUSTER_DIRECTOR' || currentUser.role === 'REGIONAL_SUPERVISOR') {
+      return 'Pending ODDG Approval';
+    }
+    return 'Pending Regional Supervisor Approval';
+  };
+
+  const [status, setStatus] = useState<DispatchStatus>(determineInitialStatus);
 
   // Re-generate auto sequence when opening or when dispatch date year changes
   const handleRegenerateCtrlNo = () => {
@@ -112,17 +154,11 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       setApprovedByName(existingSlip.approvedBy.name);
       setApprovedByTitle(existingSlip.approvedBy.title);
       setStatus(existingSlip.status);
-    } else {
-      // Auto-generate for new slip
-      const fresh = generateDispatchControlNumber(task.region, dispatchDate, taskRegistry);
-      setCtrlNo(fresh.ctrlNo);
-      setCtrlMeta(fresh);
     }
-  }, [existingSlip, task.region]);
+  }, [existingSlip]);
 
   if (!isOpen) return null;
 
-  // Handlers for dynamic establishment rows
   const handleAddEstablishment = () => {
     setEstablishments([...establishments, '']);
     setLocations([...locations, '']);
@@ -134,13 +170,13 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     setLocations(locations.filter((_, i) => i !== index));
   };
 
-  const handleUpdateEstablishment = (index: number, val: string) => {
+  const handleEstablishmentChange = (index: number, val: string) => {
     const updated = [...establishments];
     updated[index] = val;
     setEstablishments(updated);
   };
 
-  const handleUpdateLocation = (index: number, val: string) => {
+  const handleLocationChange = (index: number, val: string) => {
     const updated = [...locations];
     updated[index] = val;
     setLocations(updated);
@@ -149,23 +185,23 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const filteredEstablishments = establishments.filter((e) => e.trim().length > 0);
-    const filteredLocations = locations.filter((l) => l.trim().length > 0);
+    const cleanedEst = establishments.map((e) => e.trim()).filter(Boolean);
+    const cleanedLoc = locations.map((l) => l.trim()).filter(Boolean);
 
     const slip: DispatchSlip = {
-      id: existingSlip?.id || `DSP-${Date.now()}`,
+      id: existingSlip?.id || `disp-${Date.now()}`,
       taskId: task.id,
-      ctrlNo: ctrlNo.trim() || ctrlMeta.ctrlNo,
-      dispatchDate: dispatchDate.trim() || 'October 27, 2026',
-      establishments: filteredEstablishments.length > 0 ? filteredEstablishments : ['CAREPHAR PHARMA AND MEDICAL SUPPLIES TRADING'],
-      locations: filteredLocations.length > 0 ? filteredLocations : [task.location || 'Regional Office'],
+      ctrlNo: ctrlNo.trim(),
+      dispatchDate: dispatchDate.trim(),
+      establishments: cleanedEst.length > 0 ? cleanedEst : ['FOOD AND DRUG ESTABLISHMENT'],
+      locations: cleanedLoc.length > 0 ? cleanedLoc : [task.region],
       purposes,
       othersPurpose: othersPurpose.trim() || 'N/A',
       timeOfArrival: timeOfArrival.trim(),
-      teamLeader: teamLeader.trim() || task.assignedTo.toUpperCase(),
-      teamMembers: teamMembers.trim() || 'NONE',
-      driver: driver.trim() || 'N/A',
-      vehiclePlateNumber: vehiclePlateNumber.trim() || 'N/A',
+      teamLeader: teamLeader.trim(),
+      teamMembers: teamMembers.trim(),
+      driver: driver.trim(),
+      vehiclePlateNumber: vehiclePlateNumber.trim(),
       recommendedBy: {
         name: recommendedByName.trim(),
         title: recommendedByTitle.trim(),
@@ -173,9 +209,14 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       approvedBy: {
         name: approvedByName.trim(),
         title: approvedByTitle.trim(),
+        signatureDate: status === 'Approved' ? new Date().toLocaleDateString('en-US') : undefined,
+        signedBy: status === 'Approved' ? (currentUser ? currentUser.email : 'ODDG-FROO') : undefined,
       },
       status,
       createdAt: existingSlip?.createdAt || new Date().toISOString().split('T')[0],
+      createdBy: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : undefined,
+      createdByUserEmail: currentUser?.email,
+      createdByUserRole: currentUser?.role,
     };
 
     onSaveDispatch(slip);
@@ -185,24 +226,23 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
-        
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-900 to-indigo-950 text-white flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-200 bg-[#056839] text-white flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">
+            <span className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider block">
               FDA Official Order
             </span>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <FileText className="w-4 h-4 text-amber-400" />
+              <FileText className="w-4 h-4 text-emerald-300" />
               <span>{existingSlip ? 'Edit Dispatch Slip' : 'Create Dispatch Slip'}</span>
             </h3>
-            <p className="text-xs text-blue-100 mt-0.5">
+            <p className="text-xs text-emerald-100 mt-0.5">
               Task: {task.taskTitle} ({task.region})
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-300 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+            className="text-emerald-100 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -210,12 +250,15 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
-          
           {/* Header Info Banner */}
-          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-            <div className="text-[11.5px] text-blue-900 leading-snug">
-              Follows official FDA FROO Dispatch Slip standards. Control numbers are auto-generated based on the dispatch region, calendar year, and sequential mission count. Cluster Director recommendations and DDG approval lines are preserved.
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-[#056839] shrink-0 mt-0.5" />
+            <div className="text-[11.5px] text-emerald-950 leading-snug">
+              Official FROO Dispatch Slip format. Control numbers are auto-generated based on the dispatch region, calendar year, and sequential mission count.
+              <span className="block mt-1 font-semibold text-emerald-800">
+                • Rank & File slips require Regional Supervisor approval.
+                <br />• Supervisor & Cluster Director slips require ODDG-FROO approval.
+              </span>
             </div>
           </div>
 
@@ -223,95 +266,82 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold text-slate-800">
-                  CTRL No. <span className="text-rose-500">*</span>
+                <label className="block text-xs font-semibold text-slate-700">
+                  CTRL No. (Auto-Generated)
                 </label>
                 <button
                   type="button"
                   onClick={handleRegenerateCtrlNo}
-                  className="text-blue-600 hover:text-blue-800 text-[10.5px] font-semibold flex items-center gap-1 cursor-pointer hover:underline"
-                  title="Recalculate sequential number"
+                  className="text-[11px] text-[#056839] hover:underline flex items-center gap-1 font-medium"
+                  title="Recalculate next sequential number"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>Auto-calculate</span>
+                  <span>Refresh No.</span>
                 </button>
               </div>
-              <input
-                type="text"
-                required
-                value={ctrlNo}
-                onChange={(e) => setCtrlNo(e.target.value)}
-                placeholder="e.g. RFOX-2026-510"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-              />
-              <div className="flex items-center gap-1 mt-1 text-[10.5px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
-                <CheckCircle className="w-3 h-3 shrink-0" />
-                <span>
-                  Region: {ctrlMeta.prefix} • Year: {ctrlMeta.year} • Dispatch #{ctrlMeta.sequenceNumber} so far
-                </span>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={ctrlNo}
+                  onChange={(e) => setCtrlNo(e.target.value.toUpperCase())}
+                  className="w-full font-mono font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-[#056839] focus:outline-none focus:border-[#056839] focus:bg-white"
+                />
               </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Sequence: Region prefix {ctrlMeta.prefix} • Year {ctrlMeta.year} • Mission #{ctrlMeta.sequenceNumber}
+              </span>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-800 mb-1">
-                Dispatched on Date <span className="text-rose-500">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Dispatch Date (Date of Mission)
               </label>
-              <input
-                type="text"
-                required
-                value={dispatchDate}
-                onChange={(e) => {
-                  setDispatchDate(e.target.value);
-                  // Update year in auto-calc if year changed
-                  const fresh = generateDispatchControlNumber(task.region, e.target.value, taskRegistry);
-                  setCtrlMeta(fresh);
-                }}
-                placeholder="e.g. October 27, 2026"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  placeholder="e.g. October 27, 2026"
+                  className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+                />
+                <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+              </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Formal date format e.g. "October 27, 2026"
+                Format: Month DD, YYYY
               </span>
             </div>
           </div>
 
-          {/* Row 2: Establishments & Locations List */}
-          <div className="space-y-3 pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="font-semibold text-slate-900 block text-xs">
-                  Target Establishments & Locations
-                </label>
-                <span className="text-[11px] text-slate-500">
-                  Add one or more establishments to be inspected/visited during this dispatch.
-                </span>
-              </div>
+          {/* Establishments & Locations List */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-800">
+                Target Establishments & Locations
+              </label>
               <button
                 type="button"
                 onClick={handleAddEstablishment}
-                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-medium text-xs flex items-center gap-1 border border-blue-200 cursor-pointer transition"
+                className="text-xs text-[#056839] font-medium hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Establishment</span>
+                <span>Add Another Target</span>
               </button>
             </div>
 
-            <div className="space-y-3">
-              {establishments.map((est, idx) => (
-                <div
-                  key={idx}
-                  className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 space-y-2 relative"
-                >
+            <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              {establishments.map((est, index) => (
+                <div key={index} className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2 relative">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-blue-900 text-xs">
-                      #{idx + 1} Target Establishment
+                    <span className="text-[11px] font-bold text-[#056839]">
+                      Target #{index + 1}
                     </span>
                     {establishments.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => handleRemoveEstablishment(idx)}
-                        className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 cursor-pointer"
-                        title="Remove establishment"
+                        onClick={() => handleRemoveEstablishment(index)}
+                        className="text-slate-400 hover:text-rose-600 transition"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -321,21 +351,22 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                   <div>
                     <input
                       type="text"
+                      required
                       value={est}
-                      onChange={(e) => handleUpdateEstablishment(idx, e.target.value)}
-                      placeholder="e.g. CAREPHAR PHARMA AND MEDICAL SUPPLIES TRADING"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-900 uppercase focus:border-blue-500"
+                      onChange={(e) => handleEstablishmentChange(index, e.target.value)}
+                      placeholder="Establishment / Facility Name (e.g. CAREPHAR PHARMA)"
+                      className="w-full text-xs font-semibold uppercase border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-0.5">Location / Address</label>
-                    <textarea
-                      rows={2}
-                      value={locations[idx] || ''}
-                      onChange={(e) => handleUpdateLocation(idx, e.target.value)}
-                      placeholder="e.g. Tan Bldg, Gaabucayan Street, Puntod, Cagayan de Oro City"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 resize-none focus:border-blue-500"
+                    <input
+                      type="text"
+                      required
+                      value={locations[index] || ''}
+                      onChange={(e) => handleLocationChange(index, e.target.value)}
+                      placeholder="Specific Complete Address / Location"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
                     />
                   </div>
                 </div>
@@ -343,233 +374,204 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             </div>
           </div>
 
-          {/* Row 3: For the purpose of (Checkboxes) */}
-          <div className="pt-2 border-t border-slate-100">
-            <label className="font-semibold text-slate-900 block mb-2">
-              For the purpose of: (Check appropriate box/es)
+          {/* Purposes */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+              Purpose of Dispatch (Check applicable)
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
                 <input
                   type="checkbox"
                   checked={purposes.inspection}
                   onChange={(e) => setPurposes({ ...purposes, inspection: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded text-[#056839] focus:ring-[#056839]"
                 />
                 <span>Inspection</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
                 <input
                   type="checkbox"
                   checked={purposes.postMarketSurveillance}
                   onChange={(e) => setPurposes({ ...purposes, postMarketSurveillance: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded text-[#056839] focus:ring-[#056839]"
                 />
                 <span>Post Market Surveillance</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={purposes.attendanceToMeeting}
-                  onChange={(e) => setPurposes({ ...purposes, attendanceToMeeting: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                />
-                <span>Attendance to Meeting</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
                 <input
                   type="checkbox"
                   checked={purposes.investigation}
                   onChange={(e) => setPurposes({ ...purposes, investigation: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded text-[#056839] focus:ring-[#056839]"
                 />
                 <span>Investigation</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
                 <input
                   type="checkbox"
                   checked={purposes.witnessForDestruction}
                   onChange={(e) => setPurposes({ ...purposes, witnessForDestruction: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded text-[#056839] focus:ring-[#056839]"
                 />
                 <span>Witness for Destruction</span>
               </label>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Others</label>
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
                 <input
-                  type="text"
-                  value={othersPurpose}
-                  onChange={(e) => setOthersPurpose(e.target.value)}
-                  placeholder="e.g. N/A or Special Case Verification"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs"
+                  type="checkbox"
+                  checked={purposes.attendanceToMeeting}
+                  onChange={(e) => setPurposes({ ...purposes, attendanceToMeeting: e.target.checked })}
+                  className="rounded text-[#056839] focus:ring-[#056839]"
                 />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Time of Arrival</label>
-                <input
-                  type="text"
-                  value={timeOfArrival}
-                  onChange={(e) => setTimeOfArrival(e.target.value)}
-                  placeholder="e.g. 09:00 AM or Leave blank"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs"
-                />
-              </div>
+                <span>Attendance to Meeting</span>
+              </label>
             </div>
           </div>
 
-          {/* Row 4: Team & Vehicle Details */}
-          <div className="pt-2 border-t border-slate-100 space-y-3">
-            <span className="font-semibold text-slate-900 block">
-              Personnel & Transportation
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Team Leader <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={teamLeader}
-                  onChange={(e) => setTeamLeader(e.target.value)}
-                  placeholder="e.g. ANTHONETTE J. MELGO"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-semibold uppercase"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Team Member/s
-                </label>
-                <input
-                  type="text"
-                  value={teamMembers}
-                  onChange={(e) => setTeamMembers(e.target.value)}
-                  placeholder="e.g. NONE or comma-separated names"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs uppercase"
-                />
-              </div>
+          {/* Time & Team Personnel */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Authorized Team Leader (FDRO)
+              </label>
+              <input
+                type="text"
+                required
+                value={teamLeader}
+                onChange={(e) => setTeamLeader(e.target.value.toUpperCase())}
+                placeholder="e.g. ANTHONETTE J. MELGO"
+                className="w-full text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+              />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Driver
-                </label>
-                <input
-                  type="text"
-                  value={driver}
-                  onChange={(e) => setDriver(e.target.value)}
-                  placeholder="e.g. HANNIBAL C. ECOBEN"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs uppercase"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Vehicle Plate Number
-                </label>
-                <input
-                  type="text"
-                  value={vehiclePlateNumber}
-                  onChange={(e) => setVehiclePlateNumber(e.target.value)}
-                  placeholder="e.g. AVANZA SAB 9141"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono uppercase"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Team Member/s
+              </label>
+              <input
+                type="text"
+                value={teamMembers}
+                onChange={(e) => setTeamMembers(e.target.value)}
+                placeholder="e.g. NONE or Staff names separated by comma"
+                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+              />
             </div>
           </div>
 
-          {/* Row 5: Retained Signatories */}
-          <div className="pt-2 border-t border-slate-100 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
-            <span className="font-semibold text-slate-900 block text-xs">
-              Official Endorsement & Approval (Retained Signatories)
-            </span>
+          {/* Driver & Vehicle */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Driver Name
+              </label>
+              <input
+                type="text"
+                value={driver}
+                onChange={(e) => setDriver(e.target.value.toUpperCase())}
+                placeholder="e.g. HANNIBAL C. ECOBEN"
+                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+              />
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-              <div className="p-2.5 bg-white rounded border border-slate-200">
-                <span className="text-slate-400 block mb-1">Recommended/ Requested by:</span>
-                <input
-                  type="text"
-                  value={recommendedByName}
-                  onChange={(e) => setRecommendedByName(e.target.value)}
-                  className="w-full font-bold text-slate-900 bg-transparent border-b border-slate-200 pb-0.5 mb-1"
-                />
-                <input
-                  type="text"
-                  value={recommendedByTitle}
-                  onChange={(e) => setRecommendedByTitle(e.target.value)}
-                  className="w-full text-slate-600 bg-transparent"
-                />
-              </div>
-
-              <div className="p-2.5 bg-white rounded border border-slate-200">
-                <span className="text-slate-400 block mb-1">Approved by:</span>
-                <input
-                  type="text"
-                  value={approvedByName}
-                  onChange={(e) => setApprovedByName(e.target.value)}
-                  className="w-full font-bold text-slate-900 bg-transparent border-b border-slate-200 pb-0.5 mb-1"
-                />
-                <input
-                  type="text"
-                  value={approvedByTitle}
-                  onChange={(e) => setApprovedByTitle(e.target.value)}
-                  className="w-full text-slate-600 bg-transparent"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Vehicle Plate Number
+              </label>
+              <input
+                type="text"
+                value={vehiclePlateNumber}
+                onChange={(e) => setVehiclePlateNumber(e.target.value.toUpperCase())}
+                placeholder="e.g. AVANZA SAB 9141"
+                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+              />
             </div>
           </div>
 
-          {/* Status selector */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="font-semibold text-slate-800">Dispatch Status:</span>
-            <div className="flex items-center gap-2">
-              {(['Draft', 'Approved', 'Dispatched'] as const).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatus(st)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold cursor-pointer transition ${
-                    status === st
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
+          {/* Approval Routing Hierarchy */}
+          <div className="border-t border-slate-200 pt-4">
+            <label className="block text-xs font-semibold text-slate-800 mb-2">
+              Dispatch Routing & Approval Status
+            </label>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Current Status
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as DispatchStatus)}
+                  className="w-full text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839] font-medium"
                 >
-                  {st}
-                </button>
-              ))}
+                  <option value="Pending Regional Supervisor Approval">
+                    Pending Regional Supervisor Approval (Rank & File Requests)
+                  </option>
+                  <option value="Pending ODDG Approval">
+                    Pending ODDG Approval (Supervisor & Cluster Director Requests)
+                  </option>
+                  <option value="Approved">Approved (Authorized for Field Deployment)</option>
+                  <option value="Dispatched">Dispatched (Team in Transit)</option>
+                  <option value="Draft">Draft</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-600 block">Recommended By:</span>
+                  <input
+                    type="text"
+                    value={recommendedByName}
+                    onChange={(e) => setRecommendedByName(e.target.value)}
+                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={recommendedByTitle}
+                    onChange={(e) => setRecommendedByTitle(e.target.value)}
+                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-600 block">Approved By:</span>
+                  <input
+                    type="text"
+                    value={approvedByName}
+                    onChange={(e) => setApprovedByName(e.target.value)}
+                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={approvedByTitle}
+                    onChange={(e) => setApprovedByTitle(e.target.value)}
+                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Footer actions */}
-          <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-[#2563eb] text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm transition hover:shadow cursor-pointer flex items-center gap-1.5"
+              className="px-5 py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
             >
-              <FileText className="w-4 h-4" />
+              <CheckCircle className="w-4 h-4" />
               <span>{existingSlip ? 'Save Changes' : 'Generate Dispatch Slip'}</span>
             </button>
           </div>
         </form>
-
       </div>
     </div>
   );

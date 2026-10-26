@@ -1,6 +1,7 @@
 import React from 'react';
-import { Search, RotateCcw } from 'lucide-react';
+import { Search, RotateCcw, Filter, Building2 } from 'lucide-react';
 import { CATEGORIES, ORIGINS, PRIORITIES, STATUSES, FROO_OFFICES } from '../data/offices';
+import { UserRole } from '../types/auth';
 
 interface FiltersBarProps {
   searchQuery: string;
@@ -17,6 +18,9 @@ interface FiltersBarProps {
   onPriorityChange: (val: string) => void;
   onResetFilters: () => void;
   hasActiveFilters: boolean;
+  allowedRegions?: string[];
+  userRole?: UserRole;
+  scopeLabel?: string;
 }
 
 export const FiltersBar: React.FC<FiltersBarProps> = ({
@@ -34,9 +38,24 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   onPriorityChange,
   onResetFilters,
   hasActiveFilters,
+  allowedRegions,
+  userRole,
+  scopeLabel,
 }) => {
+  // Filter offices based on allowed jurisdictions
+  const availableOffices = allowedRegions && allowedRegions.length > 0
+    ? FROO_OFFICES.filter((o) =>
+        allowedRegions.some(
+          (ar) =>
+            ar.toLowerCase() === o.code.toLowerCase() ||
+            ar.toLowerCase() === o.name.toLowerCase() ||
+            o.code.toLowerCase().includes(ar.toLowerCase())
+        )
+      )
+    : FROO_OFFICES;
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 mb-6 shadow-xs">
+    <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 mb-6 shadow-xs space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         {/* Search Input */}
         <div className="relative flex-1 min-w-[220px] sm:min-w-[260px]">
@@ -82,15 +101,20 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </select>
         </div>
 
-        {/* Region Dropdown - Contains all 17 FROO Offices */}
-        <div className="w-full sm:w-auto min-w-[140px]">
+        {/* Region Dropdown - strictly scoped to user's authorized jurisdiction */}
+        <div className="w-full sm:w-auto min-w-[150px]">
           <select
             value={selectedRegion}
             onChange={(e) => onRegionChange(e.target.value)}
-            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer font-medium"
           >
-            <option value="All">Region</option>
-            {FROO_OFFICES.map((office) => (
+            {userRole === 'SUPERADMIN' || userRole === 'ADMIN' ? (
+              <option value="All">All Regions (17)</option>
+            ) : userRole === 'CLUSTER_DIRECTOR' ? (
+              <option value="All">All Cluster Regions ({availableOffices.length})</option>
+            ) : null}
+
+            {availableOffices.map((office) => (
               <option key={office.id} value={office.code}>
                 {office.shortLabel}
               </option>
@@ -144,6 +168,13 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           <span>Reset</span>
         </button>
       </div>
+
+      {scopeLabel && (
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+          <Building2 className="w-3.5 h-3.5 text-[#056839]" />
+          <span>Jurisdiction Visibility: <strong className="text-slate-700">{scopeLabel}</strong></span>
+        </div>
+      )}
     </div>
   );
 };

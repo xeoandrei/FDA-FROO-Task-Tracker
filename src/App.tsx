@@ -4,15 +4,25 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Task, TaskStatus, FrooUserPersona } from './types/task';
+import { Task, TaskStatus } from './types/task';
+import { UserAccount, UserRole, ClusterCode } from './types/auth';
 import {
   getStoredTasks,
   saveStoredTasks,
   resetStoredTasks,
-  getStoredPersona,
-  saveStoredPersona,
   exportTasksToCsv,
+  formatDateTime,
 } from './utils/storage';
+import {
+  getCurrentUser,
+  setCurrentUser,
+  getStoredUsers,
+  logSystemAction,
+} from './utils/authStorage';
+import { FROO_CLUSTERS, getRegionsForCluster } from './data/clusters';
+import { FROO_OFFICES } from './data/offices';
+
+import { LandingPage } from './components/LandingPage';
 import { Header } from './components/Header';
 import { StatsCards } from './components/StatsCards';
 import { FiltersBar } from './components/FiltersBar';
@@ -20,23 +30,23 @@ import { TaskList } from './components/TaskList';
 import { CreateTaskModal } from './components/CreateTaskModal';
 import { TaskDetailsDrawer } from './components/TaskDetailsDrawer';
 import { RegionalOverviewModal } from './components/RegionalOverviewModal';
+import { UserManagementModal } from './components/UserManagementModal';
+import { SystemLogsModal } from './components/SystemLogsModal';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
+  // Current authenticated user session
+  const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => getCurrentUser());
+  const [allStaffUsers, setAllStaffUsers] = useState<UserAccount[]>(() => getStoredUsers());
+
+  // Task data
   const [tasks, setTasks] = useState<Task[]>(() => getStoredTasks());
-  const [currentPersona, setCurrentPersona] = useState<FrooUserPersona>(() => getStoredPersona());
 
-  // Filter states (matching Screenshot 1)
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedOrigin, setSelectedOrigin] = useState('All');
-  const [selectedRegion, setSelectedRegion] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedPriority, setSelectedPriority] = useState('All');
-
-  // Modal / Drawer states
+  // Modals & Panels
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRegionalOverviewOpen, setIsRegionalOverviewOpen] = useState(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+  const [isSystemLogsOpen, setIsSystemLogsOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Toast feedback
@@ -52,149 +62,310 @@ export default function App() {
     saveStoredTasks(tasks);
   }, [tasks]);
 
-  // Persist persona whenever changed
-  const handleSelectPersona = (persona: FrooUserPersona) => {
-    setCurrentPersona(persona);
-    saveStoredPersona(persona);
-    showToast(`Switched active perspective to ${persona.name} (${persona.officeName})`);
+  // Compute allowed regional jurisdiction based on user role & cluster
+  const { allowedRegions, defaultRegionFilter, scopeLabel } = useMemo(() => {
+    if (!currentUser) {
+      return {
+        allowedRegions: FROO_OFFICES.map((o) => o.code),
+        defaultRegionFilter: 'All',
+        scopeLabel: 'Public Overview',
+      };
+    }
+
+    if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') {
+      return {
+        allowedRegions: FROO_OFFICES.map((o) => o.code),
+        defaultRegionFilter: 'All',
+        scopeLabel: 'National Scope (ODDG-FROO & All 17 Regional Offices)',
+      };
+    }
+
+    if (currentUser.role === 'CLUSTER_DIRECTOR') {
+      const clusterKey = currentUser.cluster || (Object.keys(FROO_CLUSTERS) as ClusterCode[]).find((code) =>
+        currentUser.office.includes(code)
+      ) || 'NLC';
+
+      const clusterInfo = FROO_CLUSTERS[clusterKey];
+      const regions = clusterInfo ? clusterInfo.regions : [];
+
+      return {
+        allowedRegions: regions,
+        defaultRegionFilter: 'All',
+        scopeLabel: `${clusterInfo?.name || 'Cluster'} Jurisdiction (${regions.join(', ')})`,
+      };
+    }
+
+    // Regional Supervisor or Rank & File (FDRO, Licensing Officer, Information Officer)
+    const userRegion = currentUser.office;
+    return {
+      allowedRegions: [userRegion],
+      defaultRegionFilter: userRegion,
+      scopeLabel: `${userRegion} Field Jurisdiction Only`,
+    };
+  }, [currentUser]);
+
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedOrigin, setSelectedOrigin] = useState('All');
+  const [selectedRegion, setSelectedRegion] = useState(defaultRegionFilter);
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedPriority, setSelectedPriority] = useState('All');
+
+  // Sync region filter when user switches perspective
+  useEffect(() => {
+    setSelectedRegion(defaultRegionFilter);
+  }, [defaultRegionFilter]);
+
+  // Login handler
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUserState(user);
+    showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
   };
 
-  const handleResetData = () => {
-    if (confirm('Reset task tracker to standard FDA/FROO demo tasks?')) {
-      const fresh = resetStoredTasks();
-      setTasks(fresh);
-      handleResetFilters();
-      showToast('Task list reset to initial demo data.');
+  // Logout handler
+  const handleLogout = () => {
+    if (currentUser) {
+      logSystemAction(
+        'USER_LOGOUT',
+        currentUser,
+        `User ${currentUser.firstName} ${currentUser.lastName} signed out of the system.`
+      );
+    }
+    setCurrentUser(null);
+    setCurrentUserState(null);
+    showToast('You have been safely signed out.');
+  };
+
+  // Quick switch between demo personas
+  const handleSwitchUser = (target: UserAccount) => {
+    const updated: UserAccount = {
+      ...target,
+      status: 'active',
+      lastLogin: new Date().toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      lastActivity: 'Active in session',
+    };
+    setCurrentUser(updated);
+    setCurrentUserState(updated);
+    showToast(`Switched perspective to ${updated.firstName} ${updated.lastName} (${updated.role})`);
+  };
+
+  const handleRefreshUserList = () => {
+    const list = getStoredUsers();
+    setAllStaffUsers(list);
+    // If current user was updated or deleted
+    if (currentUser) {
+      const match = list.find((u) => u.id === currentUser.id);
+      if (match) {
+        if (match.status === 'deactivated') {
+          handleLogout();
+        } else {
+          setCurrentUserState(match);
+        }
+      }
     }
   };
 
-  const handleResetFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('All');
-    setSelectedOrigin('All');
-    setSelectedRegion('All');
-    setSelectedStatus('All');
-    setSelectedPriority('All');
-  };
-
-  const hasActiveFilters =
-    searchQuery.trim() !== '' ||
-    selectedCategory !== 'All' ||
-    selectedOrigin !== 'All' ||
-    selectedRegion !== 'All' ||
-    selectedStatus !== 'All' ||
-    selectedPriority !== 'All';
-
-  // Filter tasks based on all criteria
+  // Filtered Tasks logic (Strictly enforces Table Scoped Visibility by default)
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      // Search
+      // 1. Strict Jurisdiction Filter
+      // If user is not superadmin/admin, enforce their allowed regional scope
+      if (currentUser && currentUser.role !== 'SUPERADMIN' && currentUser.role !== 'ADMIN') {
+        const isAllowed = allowedRegions.some(
+          (ar) =>
+            task.region.toLowerCase().includes(ar.toLowerCase()) ||
+            ar.toLowerCase().includes(task.region.toLowerCase())
+        );
+        if (!isAllowed) return false;
+      }
+
+      // 2. Region Dropdown Filter
+      if (selectedRegion !== 'All') {
+        const match =
+          task.region.toLowerCase().includes(selectedRegion.toLowerCase()) ||
+          selectedRegion.toLowerCase().includes(task.region.toLowerCase());
+        if (!match) return false;
+      }
+
+      // 3. Search Query
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
+        const query = searchQuery.toLowerCase();
         const matchesTitle = task.taskTitle.toLowerCase().includes(query);
-        const matchesId = task.id.toLowerCase().includes(query);
-        const matchesAssignee = task.assignedTo.toLowerCase().includes(query);
-        const matchesRegion = task.region.toLowerCase().includes(query);
+        const matchesAssigned = task.assignedTo.toLowerCase().includes(query);
         const matchesLocation = (task.location || '').toLowerCase().includes(query);
         const matchesDesc = (task.description || '').toLowerCase().includes(query);
-        const matchesCategory = task.category.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesId && !matchesAssignee && !matchesRegion && !matchesLocation && !matchesDesc && !matchesCategory) {
+        const matchesId = task.id.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesAssigned && !matchesLocation && !matchesDesc && !matchesId) {
           return false;
         }
       }
 
-      // Category
+      // 4. Category
       if (selectedCategory !== 'All' && task.category !== selectedCategory) {
         return false;
       }
 
-      // Origin
+      // 5. Origin
       if (selectedOrigin !== 'All' && task.origin !== selectedOrigin) {
         return false;
       }
 
-      // Region (match exact, code, or short label)
-      if (selectedRegion !== 'All') {
-        const matches =
-          task.region === selectedRegion ||
-          task.assignedOffice === selectedRegion ||
-          (selectedRegion === 'NCR' && (task.region === 'NCR' || task.region === 'Region NCR')) ||
-          (selectedRegion === 'Region NCR' && (task.region === 'NCR' || task.region === 'Region NCR')) ||
-          (selectedRegion === 'Region 4A' && (task.region === 'Region 4A' || task.region === 'Region IV-A')) ||
-          (selectedRegion === 'Region 3' && (task.region === 'Region 3' || task.region === 'Region III')) ||
-          (selectedRegion === 'Region 7' && (task.region === 'Region 7' || task.region === 'Region VII'));
-        if (!matches) return false;
-      }
-
-      // Status
+      // 6. Status
       if (selectedStatus !== 'All' && task.status !== selectedStatus) {
         return false;
       }
 
-      // Priority
+      // 7. Priority
       if (selectedPriority !== 'All' && task.priority !== selectedPriority) {
         return false;
       }
 
       return true;
     });
-  }, [tasks, searchQuery, selectedCategory, selectedOrigin, selectedRegion, selectedStatus, selectedPriority]);
+  }, [
+    tasks,
+    currentUser,
+    allowedRegions,
+    selectedRegion,
+    searchQuery,
+    selectedCategory,
+    selectedOrigin,
+    selectedStatus,
+    selectedPriority,
+  ]);
 
-  // Handlers for task mutations
-  const handleCreateTask = (newTask: Task) => {
-    setTasks((prev) => [newTask, ...prev]);
-    showToast(`Task "${newTask.taskTitle}" created and assigned.`);
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    selectedCategory !== 'All' ||
+    selectedOrigin !== 'All' ||
+    selectedRegion !== defaultRegionFilter ||
+    selectedStatus !== 'All' ||
+    selectedPriority !== 'All';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('All');
+    setSelectedOrigin('All');
+    setSelectedRegion(defaultRegionFilter);
+    setSelectedStatus('All');
+    setSelectedPriority('All');
   };
 
+  // Task creation
+  const handleCreateTask = (newTask: Task) => {
+    setTasks((prev) => [newTask, ...prev]);
+    showToast(`Task "${newTask.taskTitle}" created and assigned to ${newTask.assignedTo}.`);
+
+    if (currentUser) {
+      logSystemAction(
+        'TASK_CREATED',
+        currentUser,
+        `Created operational task: "${newTask.taskTitle}" in ${newTask.region}. Assigned to ${newTask.assignedTo}.`,
+        { targetEntityId: newTask.id, targetEntityName: newTask.taskTitle }
+      );
+    }
+  };
+
+  // Update existing task
   const handleUpdateTask = (updatedTask: Task) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     );
-    // Keep drawer in sync
-    setSelectedTask(updatedTask);
-    showToast(`Task "${updatedTask.taskTitle}" updated.`);
-  };
-
-  const handleDeleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    if (selectedTask?.id === taskId) {
-      setSelectedTask(null);
+    if (selectedTask?.id === updatedTask.id) {
+      setSelectedTask(updatedTask);
     }
-    showToast('Task removed from registry.');
+    showToast(`Task details and dispatch slips updated.`);
   };
 
-  const handleQuickStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          const updated = {
-            ...t,
-            status: newStatus,
-            activityHistory: [
-              {
-                id: `act-${Date.now()}`,
-                action: `Status marked as ${newStatus}.`,
-                actor: currentPersona.name,
-                actorOffice: currentPersona.officeName,
-                date: new Date().toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                }),
-                newStatus,
-              },
-              ...(t.activityHistory || []),
-            ],
-          };
-          if (selectedTask?.id === taskId) {
-            setSelectedTask(updated);
-          }
-          return updated;
-        }
-        return t;
-      })
-    );
+  // Delete task
+  const handleDeleteTask = (taskId: string) => {
+    if (confirm('Are you sure you want to delete this task?')) {
+      const target = tasks.find((t) => t.id === taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (selectedTask?.id === taskId) {
+        setSelectedTask(null);
+      }
+      showToast('Task deleted successfully.');
+
+      if (currentUser && target) {
+        logSystemAction(
+          'TASK_DELETED',
+          currentUser,
+          `Deleted operational task: "${target.taskTitle}" (${target.region}).`,
+          { targetEntityId: taskId, targetEntityName: target.taskTitle }
+        );
+      }
+    }
   };
+
+  // Quick "Receive Task" handler (Open -> In Progress)
+  const handleReceiveTask = (taskToReceive: Task) => {
+    const actorName = currentUser
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : taskToReceive.assignedTo;
+    const actorOffice = currentUser?.office || taskToReceive.region;
+
+    const formattedNow = formatDateTime(new Date());
+    const newActivity = {
+      id: `act-${Date.now()}`,
+      action: `Task received and accepted into In-Progress execution.`,
+      actor: actorName,
+      actorOffice: actorOffice,
+      date: formattedNow,
+      notes: `Official receipt recorded by ${actorName}. Field regulatory operation initiated.`,
+      newStatus: 'In Progress' as TaskStatus,
+    };
+
+    const updated: Task = {
+      ...taskToReceive,
+      status: 'In Progress',
+      receivedAt: new Date().toISOString(),
+      receivedBy: actorName,
+      activityHistory: [newActivity, ...(taskToReceive.activityHistory || [])],
+    };
+
+    setTasks((prev) => prev.map((t) => (t.id === taskToReceive.id ? updated : t)));
+    if (selectedTask?.id === taskToReceive.id) {
+      setSelectedTask(updated);
+    }
+
+    if (currentUser) {
+      logSystemAction(
+        'TASK_RECEIVED',
+        currentUser,
+        `Task "${taskToReceive.taskTitle}" received and accepted by ${actorName}. Status updated to In Progress.`,
+        { targetEntityId: taskToReceive.id, targetEntityName: taskToReceive.taskTitle }
+      );
+    }
+
+    showToast(`Task received! Status advanced to "In Progress".`);
+  };
+
+  // Reset to default sample dataset
+  const handleResetData = () => {
+    if (
+      confirm(
+        'Are you sure you want to reset all tasks and dispatch slips to the original FDA FROO demo data?'
+      )
+    ) {
+      const fresh = resetStoredTasks();
+      setTasks(fresh);
+      setSelectedTask(null);
+      showToast('Task tracker data has been reset to defaults.');
+    }
+  };
+
+  // If not logged in, render the official FDA FROO Landing Page
+  if (!currentUser) {
+    return <LandingPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
@@ -209,20 +380,26 @@ export default function App() {
       {/* Header */}
       <Header
         onCreateTask={() => setIsCreateModalOpen(true)}
-        currentPersona={currentPersona}
-        onSelectPersona={handleSelectPersona}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
+        onOpenSystemLogs={() => setIsSystemLogsOpen(true)}
         onOpenRegionalOverview={() => setIsRegionalOverviewOpen(true)}
         onExportCsv={() => exportTasksToCsv(filteredTasks)}
         onResetData={handleResetData}
         selectedRegionFilter={selectedRegion}
         onSelectRegionFilter={setSelectedRegion}
+        allowedRegions={allowedRegions}
+        scopeLabel={scopeLabel}
+        allStaffUsers={allStaffUsers}
+        onSwitchUser={handleSwitchUser}
       />
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Metric Cards (matching screenshot 1) */}
         <StatsCards
-          tasks={tasks}
+          tasks={filteredTasks}
           activeStatusFilter={selectedStatus}
           onSelectStatusFilter={setSelectedStatus}
         />
@@ -243,14 +420,18 @@ export default function App() {
           onPriorityChange={setSelectedPriority}
           onResetFilters={handleResetFilters}
           hasActiveFilters={hasActiveFilters}
+          allowedRegions={allowedRegions}
+          userRole={currentUser.role}
+          scopeLabel={scopeLabel}
         />
 
-        {/* Task List (matching screenshot 1) */}
+        {/* Task List (matching screenshot 1 with Receive button and details drawer trigger) */}
         <TaskList
           tasks={filteredTasks}
           onSelectTask={(task) => setSelectedTask(task)}
           selectedTaskId={selectedTask?.id}
-          onQuickStatusChange={handleQuickStatusChange}
+          onReceiveTask={handleReceiveTask}
+          currentUserName={`${currentUser.firstName} ${currentUser.lastName}`}
         />
 
         {/* Footer Note */}
@@ -268,17 +449,18 @@ export default function App() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={handleCreateTask}
-        currentPersona={currentPersona}
+        currentUser={currentUser}
+        allowedRegions={allowedRegions}
       />
 
-      {/* Task Details Drawer (matching screenshots 3 & 4) */}
+      {/* Task Details Drawer (matching screenshots 3 & 4 + Dispatch & Approvals) */}
       <TaskDetailsDrawer
         task={selectedTask}
         isOpen={Boolean(selectedTask)}
         onClose={() => setSelectedTask(null)}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={handleDeleteTask}
-        currentPersona={currentPersona}
+        currentUser={currentUser}
         allTasks={tasks}
       />
 
@@ -289,6 +471,21 @@ export default function App() {
         tasks={tasks}
         onSelectOfficeFilter={(code) => setSelectedRegion(code)}
         currentOfficeFilter={selectedRegion}
+      />
+
+      {/* User Management Modal (Admin & Superadmin only) */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        currentUser={currentUser}
+        onUserListChanged={handleRefreshUserList}
+      />
+
+      {/* Global System Logs Modal (Admin & Superadmin only) */}
+      <SystemLogsModal
+        isOpen={isSystemLogsOpen}
+        onClose={() => setIsSystemLogsOpen(false)}
+        currentUser={currentUser}
       />
     </div>
   );

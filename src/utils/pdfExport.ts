@@ -1,21 +1,18 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 export async function exportDispatchSlipToPdf(element: HTMLElement, ctrlNo: string): Promise<void> {
   const safeName = ctrlNo.replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `Dispatch_Slip_${safeName}.pdf`;
 
-  // Capture canvas with 2.5x scaling for crisp, official printing
-  const canvas = await html2canvas(element, {
-    scale: 2.5,
-    useCORS: true,
-    allowTaint: true,
-    logging: false,
+  // html-to-image uses native browser SVG foreignObject rendering, which fully
+  // supports Tailwind v4 modern CSS color functions (oklch, lab, color-mix) without error
+  const dataUrl = await toPng(element, {
+    quality: 0.98,
+    pixelRatio: 2.5,
     backgroundColor: '#ffffff',
-    windowWidth: element.scrollWidth,
+    cacheBust: true,
   });
-
-  const imgData = canvas.toDataURL('image/jpeg', 0.98);
 
   const pdf = new jsPDF({
     orientation: 'portrait',
@@ -27,7 +24,7 @@ export async function exportDispatchSlipToPdf(element: HTMLElement, ctrlNo: stri
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
-  pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+  pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
   pdf.save(filename);
 }
 

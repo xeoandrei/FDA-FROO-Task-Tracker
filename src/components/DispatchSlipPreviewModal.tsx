@@ -114,17 +114,21 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
           <div
             ref={printRef}
             id="dispatch-slip-print-container"
-            className="w-[794px] min-h-[1123px] bg-white text-slate-900 shadow-xl relative flex flex-col font-serif select-text print:shadow-none print:w-full print:m-0"
+            className="w-[794px] min-h-[1123px] bg-white text-slate-900 shadow-xl relative flex flex-col font-serif select-text print:shadow-none print:w-full print:m-0 overflow-hidden"
             style={{
-              backgroundImage: 'url(/assets/fda_dispatch_letterhead.jpg)',
-              backgroundSize: '100% 100%',
-              backgroundPosition: 'top center',
-              backgroundRepeat: 'no-repeat',
               fontFamily: '"Times New Roman", Times, serif',
             }}
           >
+            {/* High-Resolution Official Letterhead Background Image */}
+            <img
+              src="/assets/fda_dispatch_letterhead.jpg"
+              alt="FDA Official Letterhead"
+              crossOrigin="anonymous"
+              className="absolute inset-0 w-full h-full object-fill pointer-events-none -z-0 print:block"
+            />
+
             {/* Inner Content Area positioned inside the official letterhead */}
-            <div className="pt-[140px] pb-[100px] px-[68px] flex-1 flex flex-col text-[12.5px] leading-[1.38]">
+            <div className="relative z-10 pt-[140px] pb-[100px] px-[68px] flex-1 flex flex-col text-[12.5px] leading-[1.38]">
               
               {/* CTRL No. Row */}
               <div className="font-bold text-[13px] tracking-wide mb-1">

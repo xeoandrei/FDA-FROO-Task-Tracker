@@ -1,13 +1,15 @@
 import React from 'react';
 import { Task, TaskStatus, TaskPriority } from '../types/task';
 import { formatDate } from '../utils/storage';
-import { ChevronRight, Clock, AlertTriangle, CheckCircle2, CircleDot } from 'lucide-react';
+import { ChevronRight, Clock, AlertTriangle, CheckCircle2, CircleDot, Inbox } from 'lucide-react';
 
 interface TaskListProps {
   tasks: Task[];
   onSelectTask: (task: Task) => void;
   selectedTaskId?: string;
-  onQuickStatusChange: (taskId: string, newStatus: TaskStatus) => void;
+  onQuickStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
+  onReceiveTask?: (task: Task) => void;
+  currentUserName?: string;
 }
 
 export const TaskList: React.FC<TaskListProps> = ({
@@ -15,36 +17,38 @@ export const TaskList: React.FC<TaskListProps> = ({
   onSelectTask,
   selectedTaskId,
   onQuickStatusChange,
+  onReceiveTask,
+  currentUserName,
 }) => {
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
       case 'In Progress':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100/90 text-amber-900 border border-amber-200/50">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100/90 text-amber-900 border border-amber-200/50">
             In Progress
           </span>
         );
       case 'Open':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100/90 text-blue-900 border border-blue-200/50">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100/90 text-blue-900 border border-blue-200/50">
             Open
           </span>
         );
       case 'Completed':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100/90 text-emerald-900 border border-emerald-200/50">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100/90 text-emerald-900 border border-emerald-200/50">
             Completed
           </span>
         );
       case 'Overdue':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-rose-100/90 text-rose-900 border border-rose-200/50">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-rose-100/90 text-rose-900 border border-rose-200/50">
             Overdue
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800">
             {status}
           </span>
         );
@@ -99,7 +103,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                   <div className="max-w-xs mx-auto text-center">
                     <p className="text-sm font-medium text-slate-600">No tasks found</p>
                     <p className="text-xs text-slate-400 mt-1">
-                      Try adjusting your filters or search query, or create a new task.
+                      No operational tasks in this scope or matching your filters.
                     </p>
                   </div>
                 </td>
@@ -107,6 +111,7 @@ export const TaskList: React.FC<TaskListProps> = ({
             ) : (
               tasks.map((task) => {
                 const isSelected = selectedTaskId === task.id;
+
                 return (
                   <tr
                     key={task.id}
@@ -121,9 +126,19 @@ export const TaskList: React.FC<TaskListProps> = ({
                         <span className="font-semibold text-[#056839] group-hover:underline line-clamp-2">
                           {task.taskTitle}
                         </span>
-                        <span className="text-[11px] text-slate-400 mt-0.5">
-                          ID: {task.id} • {task.activityHistory?.length || 0} activity logs
-                        </span>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span>ID: {task.id}</span>
+                          <span>•</span>
+                          <span>{task.activityHistory?.length || 0} logs</span>
+                          {task.dispatchSlips && task.dispatchSlips.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-700 font-medium">
+                                {task.dispatchSlips.length} dispatch {task.dispatchSlips.length === 1 ? 'order' : 'orders'}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -139,7 +154,12 @@ export const TaskList: React.FC<TaskListProps> = ({
 
                     {/* Assigned To */}
                     <td className="py-3.5 px-4 text-slate-800 font-medium whitespace-nowrap">
-                      {task.assignedTo}
+                      <div>{task.assignedTo}</div>
+                      {task.status === 'Open' && (
+                        <span className="text-[10px] text-amber-700 font-semibold block">
+                          Awaiting Receipt
+                        </span>
+                      )}
                     </td>
 
                     {/* Region */}
@@ -154,7 +174,22 @@ export const TaskList: React.FC<TaskListProps> = ({
 
                     {/* Status */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {getStatusBadge(task.status)}
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(task.status)}
+                        {task.status === 'Open' && onReceiveTask && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReceiveTask(task);
+                            }}
+                            className="text-[11px] bg-[#056839] hover:bg-[#04522d] text-white px-2 py-0.5 rounded font-semibold transition cursor-pointer shadow-2xs"
+                            title="Receive and start this task"
+                          >
+                            Receive
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     {/* Priority */}

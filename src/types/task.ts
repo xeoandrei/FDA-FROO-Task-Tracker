@@ -1,4 +1,5 @@
 export type TaskStatus = 'Open' | 'In Progress' | 'Completed' | 'Overdue';
+
 export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 
 export interface ActivityItem {
@@ -10,6 +11,14 @@ export interface ActivityItem {
   notes?: string;
   newStatus?: TaskStatus;
 }
+
+export type DispatchStatus =
+  | 'Draft'
+  | 'Pending Regional Supervisor Approval'
+  | 'Pending ODDG Approval'
+  | 'Approved'
+  | 'Rejected'
+  | 'Dispatched';
 
 export interface DispatchSlip {
   id: string;
@@ -41,8 +50,12 @@ export interface DispatchSlip {
     signatureDate?: string;
     signedBy?: string;
   };
-  status: 'Draft' | 'Approved' | 'Dispatched';
+  status: DispatchStatus;
   createdAt: string;
+  createdBy?: string;
+  createdByUserEmail?: string;
+  createdByUserRole?: string;
+  rejectionReason?: string;
 }
 
 export interface Task {
@@ -52,6 +65,7 @@ export interface Task {
   origin: string;
   assignedTo: string;
   assignedOffice?: string;
+  assignedUserEmail?: string;
   region: string;
   dueDate: string;
   scheduledDate?: string;
@@ -63,6 +77,10 @@ export interface Task {
   priority: TaskPriority;
   createdAt: string;
   createdBy: string;
+  receivedAt?: string;
+  receivedBy?: string;
+  completedAt?: string;
+  completedBy?: string;
   activityHistory: ActivityItem[];
   dispatchSlips?: DispatchSlip[];
 }
