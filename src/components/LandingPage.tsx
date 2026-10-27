@@ -304,10 +304,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
             <span>Role-Based Access Control • 5 Clusters • 17 Regional Offices</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-tight sm:leading-none">
-            Field Regulatory Operations{' '}
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-snug sm:leading-tight">
+            Field Regulatory Operations Office{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-green-500">
-              Office Tracker
+              Tracker
             </span>
           </h1>
 
@@ -403,7 +403,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60">
-                  FDRO (RANK & FILE)
+                  FDRO (STANDARD)
                 </span>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
               </div>

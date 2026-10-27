@@ -31,7 +31,7 @@ export function determineRole(email: string, office: string, position: UserPosit
   if (position === 'Regional Supervisor') {
     return 'REGIONAL_SUPERVISOR';
   }
-  return 'RANK_AND_FILE';
+  return 'STANDARD';
 }
 
 export function getStoredUsers(): UserAccount[] {
@@ -43,15 +43,20 @@ export function getStoredUsers(): UserAccount[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
+      // Normalize any older RANK_AND_FILE to STANDARD
+      const normalized = parsed.map((u: UserAccount) => ({
+        ...u,
+        role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
+      }));
       // Ensure superadmin always exists
-      const hasSuper = parsed.some((u: UserAccount) => u.email.toLowerCase() === SUPERADMIN_EMAIL);
+      const hasSuper = normalized.some((u: UserAccount) => u.email.toLowerCase() === SUPERADMIN_EMAIL);
       if (!hasSuper) {
         const superUser = INITIAL_USERS[0];
-        const combined = [superUser, ...parsed];
+        const combined = [superUser, ...normalized];
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(combined));
         return combined;
       }
-      return parsed;
+      return normalized;
     }
     return INITIAL_USERS;
   } catch (e) {
@@ -73,6 +78,9 @@ export function getCurrentUser(): UserAccount | null {
     const raw = localStorage.getItem(CURRENT_USER_KEY);
     if (!raw) return null;
     const user: UserAccount = JSON.parse(raw);
+    if ((user.role as string) === 'RANK_AND_FILE') {
+      user.role = 'STANDARD';
+    }
     // Double check if account was deactivated in registry
     const allUsers = getStoredUsers();
     const fresh = allUsers.find((u) => u.id === user.id);
@@ -181,7 +189,7 @@ function getInitialSeedLogs(): SystemLog[] {
       userName: 'Juan Dela Cruz',
       userEmail: 'jdelacruz@fda.gov.ph',
       office: 'Region NCR',
-      role: 'RANK_AND_FILE',
+      role: 'STANDARD',
       actionType: 'TASK_RECEIVED',
       description: 'Task received and accepted: "Conduct inspection of ABC Manufacturing". Status moved to In Progress.',
       targetEntityId: 'task-1',

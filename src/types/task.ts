@@ -60,9 +60,11 @@ export interface DispatchSlip {
 
 export interface Task {
   id: string;
+  dtn?: string; // 14-digit Document Tracking Number
   taskTitle: string;
   category: string;
   origin: string;
+  originDetails?: string; // Description when Origin is 'Others'
   assignedTo: string;
   assignedOffice?: string;
   assignedUserEmail?: string;

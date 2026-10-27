@@ -271,7 +271,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   // Dispatch Approval / Rejection logic based on specified hierarchy:
-  // if rank and file -> regional supervisors can approve
+  // if standard staff -> regional supervisors can approve
   // if regional supervisors & cluster directors -> oddg froo only can approve
   const canApproveSlip = (slip: DispatchSlip): { canApprove: boolean; reason?: string } => {
     if (!currentUser) return { canApprove: true };

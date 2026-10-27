@@ -3,7 +3,8 @@ export type UserRole =
   | 'ADMIN'
   | 'CLUSTER_DIRECTOR'
   | 'REGIONAL_SUPERVISOR'
-  | 'RANK_AND_FILE';
+  | 'STANDARD'
+  | 'RANK_AND_FILE'; // alias for existing saved sessions
 
 export type UserPosition =
   | 'Deputy Director General (DDG-FROO)'

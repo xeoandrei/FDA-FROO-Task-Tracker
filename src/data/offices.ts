@@ -151,13 +151,16 @@ export const CATEGORIES = [
 ];
 
 export const ORIGINS = [
-  'FROO',
+  'ODG',
   'ODDG-FROO',
-  'Regional Office',
+  'Regional Field Office',
+  'DOH - Central & Regional',
+  'Law Enforcement Agencies',
+  'Regulatory Enforcement Unit',
+  'Special Assignments',
   'External',
-  'DOH Central Office',
-  'Inter-Agency / BOC / PNP',
   'Consumer Complaint',
+  'Others',
 ];
 
 export const PRIORITIES: ('Low' | 'Medium' | 'High' | 'Urgent')[] = [

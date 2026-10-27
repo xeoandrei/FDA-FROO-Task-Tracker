@@ -206,7 +206,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.office.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesRole = roleFilter === 'All' || u.role === roleFilter;
+    const matchesRole =
+      roleFilter === 'All' ||
+      u.role === roleFilter ||
+      (roleFilter === 'STANDARD' && ((u.role as string) === 'RANK_AND_FILE' || u.role === 'STANDARD'));
     const matchesStatus = statusFilter === 'All' || u.status === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
@@ -225,7 +228,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900">FDA FROO User Management</h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-[#056839] border border-emerald-200">
-                  {currentUser.role} Control
+                  {currentUser.role === 'RANK_AND_FILE' ? 'STANDARD' : currentUser.role} Control
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -283,7 +286,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <option value="ADMIN">Admin (ODDG-FROO)</option>
               <option value="CLUSTER_DIRECTOR">Cluster Director</option>
               <option value="REGIONAL_SUPERVISOR">Regional Supervisor</option>
-              <option value="RANK_AND_FILE">Rank & File</option>
+              <option value="STANDARD">Standard</option>
             </select>
 
             <select
@@ -356,7 +359,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             : 'bg-slate-100 text-slate-700 border border-slate-200'
                         }`}
                       >
-                        {user.role}
+                        {(user.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : user.role}
                       </span>
                     </td>
 

@@ -84,19 +84,21 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   const [vehiclePlateNumber, setVehiclePlateNumber] = useState(existingSlip?.vehiclePlateNumber || 'AVANZA SAB 9141');
 
   // Officials recommendation & approval defaults based on roles
-  const defaultRecommendedName = currentUser?.role === 'RANK_AND_FILE'
+  const isStandardStaff = currentUser?.role === 'STANDARD' || (currentUser?.role as string) === 'RANK_AND_FILE';
+
+  const defaultRecommendedName = isStandardStaff
     ? `${currentUser.firstName.toUpperCase()} ${currentUser.middleInitial ? currentUser.middleInitial.toUpperCase() + ' ' : ''}${currentUser.lastName.toUpperCase()}`
     : 'GOMEL C. GABUNA, LLB, MDM, CESE';
 
-  const defaultRecommendedTitle = currentUser?.role === 'RANK_AND_FILE'
+  const defaultRecommendedTitle = isStandardStaff
     ? `${currentUser.position}, ${currentUser.office}`
     : 'Executive Assistant Designate for FROO, Director II, NLC';
 
-  const defaultApprovedName = currentUser?.role === 'RANK_AND_FILE'
+  const defaultApprovedName = isStandardStaff
     ? 'REGIONAL SUPERVISOR'
     : 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
 
-  const defaultApprovedTitle = currentUser?.role === 'RANK_AND_FILE'
+  const defaultApprovedTitle = isStandardStaff
     ? `Regional Regulatory Enforcement Supervisor - ${task.region}`
     : 'Deputy Director General - Field Regulatory Operations Office';
 
@@ -256,7 +258,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             <div className="text-[11.5px] text-emerald-950 leading-snug">
               Official FROO Dispatch Slip format. Control numbers are auto-generated based on the dispatch region, calendar year, and sequential mission count.
               <span className="block mt-1 font-semibold text-emerald-800">
-                • Rank & File slips require Regional Supervisor approval.
+                • Standard staff slips require Regional Supervisor approval.
                 <br />• Supervisor & Cluster Director slips require ODDG-FROO approval.
               </span>
             </div>
@@ -507,7 +509,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                   className="w-full text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839] font-medium"
                 >
                   <option value="Pending Regional Supervisor Approval">
-                    Pending Regional Supervisor Approval (Rank & File Requests)
+                    Pending Regional Supervisor Approval (Standard Staff Requests)
                   </option>
                   <option value="Pending ODDG Approval">
                     Pending ODDG Approval (Supervisor & Cluster Director Requests)

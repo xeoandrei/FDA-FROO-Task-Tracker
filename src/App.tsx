@@ -95,7 +95,7 @@ export default function App() {
       };
     }
 
-    // Regional Supervisor or Rank & File (FDRO, Licensing Officer, Information Officer)
+    // Regional Supervisor or Standard Staff (FDRO, Licensing Officer, Information Officer)
     const userRegion = currentUser.office;
     return {
       allowedRegions: [userRegion],
