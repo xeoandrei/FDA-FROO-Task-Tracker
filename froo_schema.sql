@@ -299,6 +299,55 @@ INSERT IGNORE INTO `offices` (`office_code`, `office_name`, `cluster_code`, `off
 ('CAR', 'Regional Field Office - Cordillera Administrative Region', 'NLC', 'REGIONAL'),
 ('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL');
 
--- SECURITY: No sample user accounts are seeded by this script.
--- Create real users through a backend/admin provisioning process using a verified
--- bcrypt/Argon2 password hash. Do not reuse placeholder hashes or default passwords.
+-- ----------------------------------------------------------------------------
+-- SEED INITIAL FDA USERS (Default demo password: password123)
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO `users` (`id`, `username`, `email`, `password_hash`, `first_name`, `middle_initial`, `last_name`, `position`, `role_code`, `office_code`, `cluster_code`, `is_active`, `last_activity`) VALUES
+('usr-superadmin', 'amldelgado', 'amldelgado@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'AML', 'M.', 'Delgado', 'Deputy Director General (DDG-FROO)', 'SUPERADMIN', 'ODDG-FROO', NULL, 1, 'Active in System Console'),
+('usr-franklin', 'atty.franklin', 'franklin.tabaquin@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Franklin Anthony', 'M.', 'Tabaquin IV', 'Deputy Director General (DDG-FROO)', 'ADMIN', 'ODDG-FROO', NULL, 1, 'Approved regional dispatch slips'),
+('usr-ton', 'atty.ton', 'ton.froo@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Ton', 'S.', 'Villaruel', 'ODDG-FROO Staff', 'ADMIN', 'ODDG-FROO', NULL, 1, 'Created inspection directives'),
+('usr-gomel', 'director.gomel', 'gomel.gabuna@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Gomel', 'C.', 'Gabuna', 'Cluster Director', 'CLUSTER_DIRECTOR', 'North Luzon Cluster (NLC)', 'NLC', 1, 'Reviewed NLC regional workload'),
+('usr-slc-dir', 'director.slc', 'slc.director@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Maria Elena', 'V.', 'Ramos', 'Cluster Director', 'CLUSTER_DIRECTOR', 'South Luzon Cluster (SLC)', 'SLC', 1, 'Audited CALABARZON & NCR investigations'),
+('usr-sup-ncr', 'sup.ncr', 'ncr.supervisor@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Camille', 'B.', 'Bautista', 'Regional Supervisor', 'REGIONAL_SUPERVISOR', 'Region NCR', NULL, 1, 'Approved FDRO inspection dispatch'),
+('usr-sup-r4a', 'sup.r4a', 'r4a.supervisor@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Ronaldo', 'C.', 'Castillo', 'Regional Supervisor', 'REGIONAL_SUPERVISOR', 'Region 4A', NULL, 1, 'Assigned establishment investigation'),
+('usr-fdro-juan', 'juan.fdro', 'jdelacruz@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Juan', 'D.', 'Dela Cruz', 'Food-Drug Regulation Officer (FDRO)', 'STANDARD', 'Region NCR', NULL, 1, 'Field regulatory inspection'),
+('usr-fdro-maria', 'maria.fdro', 'msantos@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Maria', 'P.', 'Santos', 'Food-Drug Regulation Officer (FDRO)', 'STANDARD', 'Region 4A', NULL, 1, 'Awaiting task receipt for establishment investigation'),
+('usr-fdro-melgo', 'anthonette.fdro', 'anthonette.melgo@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Anthonette', 'J.', 'Melgo', 'Food-Drug Regulation Officer (FDRO)', 'STANDARD', 'Region 10', NULL, 1, 'Field dispatched for pharmacy PMS'),
+('usr-lo-carlos', 'carlos.lo', 'cmendoza@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Carlos', 'E.', 'Mendoza', 'Licensing Officer', 'STANDARD', 'Region 3', NULL, 1, 'Evaluated LTO renewal compliance'),
+('usr-io-gemma', 'gemma.io', 'gemma.bobis@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Gemma', 'R.', 'Bobis', 'Information Officer', 'STANDARD', 'Region 5', NULL, 1, 'Published public health advisory report');
+
+-- ----------------------------------------------------------------------------
+-- SEED INITIAL TASKS (14-Digit Locked DTN)
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO `tasks` (`id`, `dtn`, `task_title`, `category`, `origin`, `origin_details`, `assigned_to_user_id`, `assigned_office_code`, `region`, `due_date`, `location`, `description`, `outcome`, `status`, `priority`, `created_by_user_id`) VALUES
+('FROO-TSK-2026-001', '20260310001824', 'Conduct Good Distribution Practice (GDP) Inspection of ABC Pharma Warehouse', 'Good Distribution Practice (GDP) Inspection', 'FDA Centers / Offices', 'Center for Drug Regulation and Research (CDRR) Referral', 'usr-fdro-juan', 'Region NCR', 'Region NCR', '2026-11-15', 'Taguig City, Metro Manila', 'Comprehensive Good Distribution Practice verification and cold-chain temperature log monitoring for critical biologic medicines.', 'Pending', 'Open', 'High', 'usr-ton'),
+('FROO-TSK-2026-002', '20260310001825', 'Post-Market Surveillance of Cosmetic Creams and Skincare Products', 'Post-Market Surveillance (PMS)', 'DOH / Other Government Agencies', 'Inter-Agency Task Force Consumer Alert', 'usr-fdro-maria', 'Region 4A', 'Region 4A', '2026-11-20', 'Calamba City, Laguna', 'Mystery shopping and random product sampling of unregistered cosmetic whitening creams suspected of elevated mercury contents.', 'Pending', 'Open', 'Urgent', 'usr-ton');
+
+-- ----------------------------------------------------------------------------
+-- SEED INITIAL TASK ACTIVITY LOGS
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO `task_activity_logs` (`id`, `task_id`, `action`, `actor_name`, `actor_office`, `actor_user_id`, `notes`, `new_status`) VALUES
+(1, 'FROO-TSK-2026-001', 'Task initialized and assigned in system', 'Ton S. Villaruel', 'ODDG-FROO', 'usr-ton', 'Directive logged from CDRR and assigned for regional execution.', 'Open'),
+(2, 'FROO-TSK-2026-002', 'Task initialized and assigned in system', 'Ton S. Villaruel', 'ODDG-FROO', 'usr-ton', 'Inter-agency alert forwarded to Region 4A field enforcement team.', 'Open');
+
+-- ----------------------------------------------------------------------------
+-- SEED INITIAL DISPATCH SLIPS & DESTINATIONS
+-- ----------------------------------------------------------------------------
+INSERT IGNORE INTO `dispatch_slips` (
+  `id`, `task_id`, `ctrl_no`, `dispatch_date`,
+  `purpose_inspection`, `purpose_pms`, `purpose_meeting`, `purpose_investigation`, `purpose_destruction`,
+  `others_purpose`, `time_of_arrival`, `team_leader`, `team_members`, `driver`, `vehicle_plate_number`,
+  `recommended_by_name`, `recommended_by_title`, `approved_by_name`, `approved_by_title`,
+  `status`, `created_by_user_id`
+) VALUES (
+  'DSP-2026-001', 'FROO-TSK-2026-001', 'NCR-2026-0001', 'October 28, 2026',
+  1, 0, 0, 0, 0,
+  'N/A', '09:00 AM', 'JUAN D. DELA CRUZ', 'NONE', 'HANNIBAL C. ECOBEN', 'AVANZA SAB 9141',
+  'CAMILLE B. BAUTISTA', 'Regional Supervisor, Region NCR',
+  'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV', 'Deputy Director General - Field Regulatory Operations Office',
+  'Pending Regional Supervisor Approval', 'usr-fdro-juan'
+);
+
+INSERT IGNORE INTO `dispatch_slip_destinations` (`id`, `dispatch_slip_id`, `sequence_no`, `establishment_name`, `location_address`) VALUES
+(1, 'DSP-2026-001', 1, 'ABC PHARMA WAREHOUSE', 'Taguig City, Metro Manila');
+

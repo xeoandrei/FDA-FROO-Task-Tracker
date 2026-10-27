@@ -57,7 +57,23 @@ export async function runAutoSeed(): Promise<void> {
       ('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL');
     `);
 
-    // 4. Check if users table is populated
+    // 4. Ensure users table has required columns (in case created from an older schema version)
+    const [existingCols]: [any[], any] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
+    );
+    const colSet = new Set(existingCols.map((c: any) => c.COLUMN_NAME));
+
+    if (!colSet.has('username')) {
+      await connection.query(`ALTER TABLE users ADD COLUMN username VARCHAR(100) NULL AFTER id, ADD UNIQUE KEY uq_users_username (username)`);
+    }
+    if (!colSet.has('cluster_code')) {
+      await connection.query(`ALTER TABLE users ADD COLUMN cluster_code VARCHAR(20) NULL AFTER office_code`);
+    }
+    if (!colSet.has('last_activity')) {
+      await connection.query(`ALTER TABLE users ADD COLUMN last_activity VARCHAR(255) NULL AFTER last_login_at`);
+    }
+
+    // 5. Check if users table is populated
     const [userRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM users');
     const userCount = userRows[0]?.count || 0;
 
@@ -332,6 +348,39 @@ export async function runAutoSeed(): Promise<void> {
         );
       }
       console.log('✅ Baseline operational tasks seeded.');
+    }
+
+    // 6. Seed initial dispatch slip if dispatch_slips table is empty
+    const [dispatchRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM dispatch_slips');
+    const dispatchCount = dispatchRows[0]?.count || 0;
+
+    if (dispatchCount === 0) {
+      console.log('🌱 Seeding sample dispatch slip...');
+      await connection.query(
+        `INSERT IGNORE INTO dispatch_slips (
+          id, task_id, ctrl_no, dispatch_date,
+          purpose_inspection, purpose_pms, purpose_meeting, purpose_investigation, purpose_destruction,
+          others_purpose, time_of_arrival, team_leader, team_members, driver, vehicle_plate_number,
+          recommended_by_name, recommended_by_title, approved_by_name, approved_by_title,
+          status, created_by_user_id
+        ) VALUES (
+          'DSP-2026-001', 'FROO-TSK-2026-001', 'NCR-2026-0001', 'October 28, 2026',
+          1, 0, 0, 0, 0,
+          'N/A', '09:00 AM', 'JUAN D. DELA CRUZ', 'NONE', 'HANNIBAL C. ECOBEN', 'AVANZA SAB 9141',
+          'CAMILLE B. BAUTISTA', 'Regional Supervisor, Region NCR',
+          'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV', 'Deputy Director General - Field Regulatory Operations Office',
+          'Pending Regional Supervisor Approval', 'usr-fdro-juan'
+        )`
+      );
+
+      await connection.query(
+        `INSERT IGNORE INTO dispatch_slip_destinations (
+          id, dispatch_slip_id, sequence_no, establishment_name, location_address
+        ) VALUES (
+          1, 'DSP-2026-001', 1, 'ABC PHARMA WAREHOUSE', 'Taguig City, Metro Manila'
+        )`
+      );
+      console.log('✅ Sample dispatch slip seeded.');
     }
   } catch (err) {
     console.warn('⚠️ Auto-seed notice (database may already be configured or offline):', (err as Error).message);

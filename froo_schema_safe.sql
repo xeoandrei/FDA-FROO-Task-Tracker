@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS `roles` (
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
   `id` CHAR(36) NOT NULL,
+  `username` VARCHAR(100) NULL,
   `email` VARCHAR(191) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
   `first_name` VARCHAR(100) NOT NULL,
@@ -67,12 +68,15 @@ CREATE TABLE IF NOT EXISTS `users` (
   `position` VARCHAR(150) NOT NULL,
   `role_code` VARCHAR(50) NOT NULL,
   `office_code` VARCHAR(50) NOT NULL,
+  `cluster_code` VARCHAR(20) NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `last_login_at` DATETIME NULL,
+  `last_activity` VARCHAR(255) NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_email` (`email`),
+  UNIQUE KEY `uq_users_username` (`username`),
   KEY `idx_users_role` (`role_code`),
   KEY `idx_users_office` (`office_code`),
   CONSTRAINT `fk_users_role`
@@ -80,7 +84,10 @@ CREATE TABLE IF NOT EXISTS `users` (
     ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT `fk_users_office`
     FOREIGN KEY (`office_code`) REFERENCES `offices` (`office_code`)
-    ON UPDATE CASCADE ON DELETE RESTRICT
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT `fk_users_cluster`
+    FOREIGN KEY (`cluster_code`) REFERENCES `clusters` (`cluster_code`)
+    ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

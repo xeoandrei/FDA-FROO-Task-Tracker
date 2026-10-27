@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
 import { checkDatabaseConnection, pool } from './db';
 import { runAutoSeed } from './seed';
 
@@ -14,15 +13,20 @@ import referenceRoutes from './routes/referenceRoutes';
 const app = express();
 const PORT = Number(process.env.API_PORT || 4000);
 
-// Enable CORS for frontend Vite dev server (port 3000) and other local clients
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  })
-);
+// Built-in CORS middleware for frontend Vite dev server (port 3000) and local clients
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 
 app.use(express.json());
 
@@ -34,10 +38,25 @@ app.use('/api', dispatchRoutes); // /api/tasks/:taskId/dispatches and /api/dispa
 app.use('/api/system-logs', systemLogRoutes);
 app.use('/api/references', referenceRoutes);
 
+// Friendly root endpoint when opening http://localhost:4000 in the browser
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'FDA FROO Task Tracker Backend API',
+    status: 'running',
+    message: 'Your backend API server is working! Open your frontend app at http://localhost:3000 (or http://localhost:3001) to use the website.',
+    endpoints: {
+      health: '/api/health',
+      tasks: '/api/tasks',
+      users: '/api/users',
+    },
+  });
+});
+
 // Health & DB status endpoint
 app.get('/api/health', async (_req, res) => {
   try {
     await checkDatabaseConnection();
+    await runAutoSeed();
 
     const [rows] = await pool.query(
       'SELECT DATABASE() AS dbName, @@port AS mysqlPort, @@version AS mysqlVersion'
