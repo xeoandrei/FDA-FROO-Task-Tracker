@@ -119,12 +119,19 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
 
   // Status computation based on user role and hierarchy
   const determineInitialStatus = (): DispatchStatus => {
-    if (existingSlip?.status) return existingSlip.status;
-    if (!currentUser) return 'Pending Regional Supervisor Approval';
-    if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') {
-      return 'Approved';
+    if (
+      existingSlip?.status === 'Pending Regional Supervisor Approval' ||
+      existingSlip?.status === 'Pending ODDG Approval'
+    ) {
+      return existingSlip.status;
     }
-    if (currentUser.role === 'CLUSTER_DIRECTOR' || currentUser.role === 'REGIONAL_SUPERVISOR') {
+    if (!currentUser) return 'Pending Regional Supervisor Approval';
+    if (
+      currentUser.role === 'CLUSTER_DIRECTOR' ||
+      currentUser.role === 'REGIONAL_SUPERVISOR' ||
+      currentUser.role === 'ADMIN' ||
+      currentUser.role === 'SUPERADMIN'
+    ) {
       return 'Pending ODDG Approval';
     }
     return 'Pending Regional Supervisor Approval';
@@ -157,7 +164,11 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       setRecommendedByTitle(existingSlip.recommendedBy.title);
       setApprovedByName(existingSlip.approvedBy.name);
       setApprovedByTitle(existingSlip.approvedBy.title);
-      setStatus(existingSlip.status);
+      setStatus(
+        existingSlip.status === 'Pending ODDG Approval'
+          ? 'Pending ODDG Approval'
+          : 'Pending Regional Supervisor Approval'
+      );
     }
   }, [existingSlip]);
 
@@ -510,13 +521,11 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                   className="w-full text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839] font-medium"
                 >
                   <option value="Pending Regional Supervisor Approval">
-                    Pending Regional Supervisor Approval (Standard Staff Requests)
+                    Pending RS / CD Approval (Standard Dispatch)
                   </option>
                   <option value="Pending ODDG Approval">
-                    Pending ODDG Approval (Supervisor & Cluster Director Requests)
+                    Pending ODDG FROO Approval (RS and CD Dispatch)
                   </option>
-                  <option value="Approved">Approved (Authorized for Field Deployment)</option>
-                  <option value="Draft">Draft</option>
                 </select>
               </div>
 

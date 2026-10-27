@@ -25,6 +25,7 @@ import {
   logSystemAction,
   SUPERADMIN_EMAIL,
 } from '../utils/authStorage';
+import { api } from '../api/client';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -66,13 +67,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     onUserListChanged();
   };
 
-  const handleToggleStatus = (target: UserAccount) => {
+  const handleToggleStatus = async (target: UserAccount) => {
     if (target.email.toLowerCase() === SUPERADMIN_EMAIL) {
       alert('The primary Superadmin account cannot be deactivated.');
       return;
     }
 
     const nextStatus: AccountStatus = target.status === 'active' ? 'deactivated' : 'active';
+
+    try {
+      await api.updateUserStatus(target.id, nextStatus as 'active' | 'deactivated');
+    } catch (err: any) {
+      console.warn('Backend status update note:', err.message);
+    }
+
     const updated: UserAccount[] = users.map((u) =>
       u.id === target.id ? { ...u, status: nextStatus } : u
     );
@@ -116,7 +124,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     );
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setFormSuccess(null);
@@ -155,14 +163,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
 
     const assignedRole = determineRole(emailTrimmed, finalOffice, newPosition);
+    const formattedMiddleInitial = newMiddleInitial.trim()
+      ? newMiddleInitial.trim().endsWith('.')
+        ? newMiddleInitial.trim()
+        : `${newMiddleInitial.trim()}.`
+      : '';
 
-    const created: UserAccount = {
+    let created: UserAccount = {
       id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       username: usernameTrimmed,
       password: newPassword,
       email: emailTrimmed,
       firstName: newFirstName.trim(),
-      middleInitial: newMiddleInitial.trim() ? (newMiddleInitial.trim().endsWith('.') ? newMiddleInitial.trim() : `${newMiddleInitial.trim()}.`) : '',
+      middleInitial: formattedMiddleInitial,
       lastName: newLastName.trim(),
       position: newPosition,
       office: finalOffice,
@@ -173,6 +186,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       lastLogin: undefined,
       lastActivity: 'Account created by Administrator',
     };
+
+    try {
+      const apiCreated = await api.createUser({
+        username: created.username,
+        password: newPassword,
+        email: created.email,
+        firstName: created.firstName,
+        middleInitial: created.middleInitial,
+        lastName: created.lastName,
+        position: created.position,
+        office: created.office,
+        cluster: created.cluster,
+        role: created.role,
+        status: 'active',
+      });
+      created = apiCreated;
+    } catch {
+      // Fallback to local user object when local MySQL container is offline
+    }
 
     const updated = [created, ...users];
     saveStoredUsers(updated);

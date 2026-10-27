@@ -41,6 +41,7 @@ import {
 } from './utils/taskAuthorization';
 import { ActivityItem } from './types/task';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { api } from './api/client';
 
 export default function App() {
   // Current authenticated user session
@@ -49,6 +50,9 @@ export default function App() {
 
   // Task data
   const [tasks, setTasks] = useState<Task[]>(() => getStoredTasks());
+
+  // Database / API connectivity state
+  const [dbStatus, setDbStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
 
   // Modals & Panels
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -68,6 +72,43 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Sync with Express backend & MySQL database when available
+  useEffect(() => {
+    let isMounted = true;
+    async function checkAndSync() {
+      try {
+        const health = await api.checkHealth();
+        if (health && health.status === 'ok') {
+          if (isMounted) setDbStatus('online');
+
+          const [usersRes, tasksRes] = await Promise.allSettled([
+            api.getUsers(),
+            api.getTasks(),
+          ]);
+
+          if (isMounted && usersRes.status === 'fulfilled' && usersRes.value.length > 0) {
+            setAllStaffUsers(usersRes.value);
+            saveStoredUsers(usersRes.value);
+          }
+
+          if (isMounted && tasksRes.status === 'fulfilled' && tasksRes.value.length > 0) {
+            setTasks(tasksRes.value);
+            saveStoredTasks(tasksRes.value);
+          }
+        } else {
+          if (isMounted) setDbStatus('offline');
+        }
+      } catch {
+        if (isMounted) setDbStatus('offline');
+      }
+    }
+
+    checkAndSync();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Persist tasks whenever changed
   useEffect(() => {
@@ -336,7 +377,34 @@ export default function App() {
   };
 
   // Task creation
-  const handleCreateTask = (newTask: Task) => {
+  const handleCreateTask = async (newTask: Task) => {
+    if (dbStatus === 'online') {
+      try {
+        const created = await api.createTask({
+          taskTitle: newTask.taskTitle,
+          category: newTask.category,
+          origin: newTask.origin,
+          originDetails: newTask.originDetails,
+          assignedTo: newTask.assignedTo,
+          region: newTask.region,
+          dueDate: newTask.dueDate,
+          scheduledDate: newTask.scheduledDate,
+          location: newTask.location,
+          description: newTask.description,
+          priority: newTask.priority,
+          dtn: newTask.dtn,
+        });
+
+        if (created) {
+          setTasks((prev) => [created, ...prev]);
+          showToast(`Task "${created.taskTitle}" saved to MySQL and assigned to ${created.assignedTo}.`);
+          return;
+        }
+      } catch (err: any) {
+        console.warn('API task creation note:', err.message);
+      }
+    }
+
     setTasks((prev) => [newTask, ...prev]);
     showToast(`Task "${newTask.taskTitle}" created and assigned to ${newTask.assignedTo}.`);
 
@@ -362,9 +430,17 @@ export default function App() {
   };
 
   // Delete task
-  const handleDeleteTask = (taskId: string) => {
+  const handleDeleteTask = async (taskId: string) => {
     if (confirm('Are you sure you want to delete this task?')) {
       const target = tasks.find((t) => t.id === taskId);
+      if (dbStatus === 'online') {
+        try {
+          await api.deleteTask(taskId);
+        } catch (err: any) {
+          console.warn('Backend delete task notice:', err.message);
+        }
+      }
+
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       if (selectedTask?.id === taskId) {
         setSelectedTask(null);
@@ -388,12 +464,29 @@ export default function App() {
   };
 
   // Confirmed Receive Task handler with validation, identity & timestamp recording
-  const handleConfirmAcceptTask = (taskToReceive: Task) => {
+  const handleConfirmAcceptTask = async (taskToReceive: Task) => {
     const validation = validateCanReceiveTask(taskToReceive, currentUser);
     if (!validation.allowed) {
       showToast(validation.reason || 'You are not authorized to receive this task.');
       setTaskToConfirmReceive(null);
       return;
+    }
+
+    if (dbStatus === 'online') {
+      try {
+        const updated = await api.receiveTask(taskToReceive.id);
+        if (updated) {
+          setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          if (selectedTask?.id === updated.id) {
+            setSelectedTask(updated);
+          }
+          setTaskToConfirmReceive(null);
+          showToast(`Task "${updated.taskTitle}" officially received & accepted into MySQL execution.`);
+          return;
+        }
+      } catch (err: any) {
+        console.warn('Backend receive task notice:', err.message);
+      }
     }
 
     const actorName = currentUser
@@ -439,8 +532,6 @@ export default function App() {
     showToast(`Task "${taskToReceive.taskTitle}" officially received & accepted into execution.`);
   };
 
-
-
   // If not logged in, render the official FDA FROO Landing Page
   if (!currentUser) {
     return <LandingPage onLoginSuccess={handleLoginSuccess} />;
@@ -470,6 +561,7 @@ export default function App() {
         allowedRegions={allowedRegions}
         scopeLabel={scopeLabel}
         allStaffUsers={allStaffUsers}
+        dbStatus={dbStatus}
       />
 
       {/* Main Body */}

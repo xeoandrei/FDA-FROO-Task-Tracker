@@ -32,6 +32,7 @@ interface HeaderProps {
   scopeLabel?: string;
   allStaffUsers?: UserAccount[];
   onSwitchUser?: (targetUser: UserAccount) => void;
+  dbStatus?: 'connecting' | 'online' | 'offline';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -48,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   scopeLabel,
   allStaffUsers = [],
   onSwitchUser,
+  dbStatus = 'offline',
 }) => {
   const isAdminOrSuper = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
 
@@ -73,8 +75,29 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* User Account Controls */}
+        {/* User Account & Database Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Database Connectivity Indicator */}
+          <div
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border ${
+              dbStatus === 'online'
+                ? 'bg-emerald-900/80 text-emerald-200 border-emerald-500/50'
+                : 'bg-emerald-950/60 text-emerald-300/80 border-emerald-700/50'
+            }`}
+            title={
+              dbStatus === 'online'
+                ? 'Connected to Express API & MySQL Database (froo_db on port 3307)'
+                : 'Running in Local Storage Mode (Express API offline). Start Docker MySQL and run "npm run server" for live DB.'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                dbStatus === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              }`}
+            />
+            <span>{dbStatus === 'online' ? 'MySQL Live' : 'Local Mode'}</span>
+          </div>
+
           {currentUser ? (
             <>
               {/* User details badge */}

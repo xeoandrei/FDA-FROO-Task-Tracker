@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   ShieldCheck,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { SystemLog, SystemActionType, UserAccount } from '../types/auth';
 import { getSystemLogs, clearSystemLogs } from '../utils/authStorage';
+import { api } from '../api/client';
 
 interface SystemLogsModalProps {
   isOpen: boolean;
@@ -32,10 +33,33 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAction, setSelectedAction] = useState<string>('All');
 
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    api
+      .getSystemLogs()
+      .then((remoteLogs) => {
+        if (isMounted && remoteLogs && remoteLogs.length > 0) {
+          setLogs(remoteLogs);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setLogs(getSystemLogs());
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleRefresh = () => {
-    setLogs(getSystemLogs());
+  const handleRefresh = async () => {
+    try {
+      const remoteLogs = await api.getSystemLogs();
+      setLogs(remoteLogs);
+    } catch {
+      setLogs(getSystemLogs());
+    }
   };
 
   const handleClearLogs = () => {

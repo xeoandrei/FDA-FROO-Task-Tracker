@@ -31,6 +31,7 @@ import {
   logSystemAction,
   SUPERADMIN_EMAIL,
 } from '../utils/authStorage';
+import { api } from '../api/client';
 
 interface LandingPageProps {
   onLoginSuccess: (user: UserAccount) => void;
@@ -60,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
 
   // Handle Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
 
@@ -68,6 +69,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     if (!identifier || !loginPassword.trim()) {
       setLoginError('Please enter both your FDA username/email and password.');
       return;
+    }
+
+    try {
+      const res = await api.login(identifier, loginPassword);
+      if (res && res.user) {
+        setCurrentUser(res.user);
+        onLoginSuccess(res.user);
+        return;
+      }
+    } catch (apiErr: any) {
+      if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
+        setLoginError(apiErr.message);
+        return;
+      }
     }
 
     const users = getStoredUsers();
@@ -120,7 +135,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
   };
 
   // Handle Quick Demo Login
-  const handleQuickLogin = (username: string) => {
+  const handleQuickLogin = async (username: string) => {
+    try {
+      const res = await api.login(username, 'password123');
+      if (res && res.user) {
+        setCurrentUser(res.user);
+        onLoginSuccess(res.user);
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+
     const users = getStoredUsers();
     const target = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
     if (target) {
@@ -151,7 +177,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
   };
 
   // Handle Registration
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError(null);
     setRegSuccess(null);
@@ -180,17 +206,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const users = getStoredUsers();
-    if (users.some((u) => u.username.toLowerCase() === usernameTrimmed)) {
-      setRegError('This username is already taken. Please choose another.');
-      return;
-    }
-
-    if (users.some((u) => u.email.toLowerCase() === emailTrimmed)) {
-      setRegError('An account with this official FDA email already exists.');
-      return;
-    }
-
     // Office & Cluster logic
     let finalOffice = regOffice;
     let finalCluster: ClusterCode | undefined = undefined;
@@ -203,6 +218,43 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     }
 
     const assignedRole = determineRole(emailTrimmed, finalOffice, regPosition);
+
+    try {
+      const created = await api.createUser({
+        username: usernameTrimmed,
+        email: emailTrimmed,
+        password: regPassword,
+        firstName: regFirstName.trim(),
+        middleInitial: regMiddleInitial.trim() ? (regMiddleInitial.trim().endsWith('.') ? regMiddleInitial.trim() : `${regMiddleInitial.trim()}.`) : '',
+        lastName: regLastName.trim(),
+        position: regPosition,
+        office: finalOffice,
+        cluster: finalCluster,
+        role: assignedRole,
+      });
+
+      if (created) {
+        setRegSuccess(`Account for ${regFirstName} ${regLastName} registered successfully in FROO system! You may now sign in.`);
+        return;
+      }
+    } catch (apiErr: any) {
+      if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
+        setRegError(apiErr.message);
+        return;
+      }
+    }
+
+    // Fallback to local
+    const users = getStoredUsers();
+    if (users.some((u) => u.username.toLowerCase() === usernameTrimmed)) {
+      setRegError('This username is already taken. Please choose another.');
+      return;
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === emailTrimmed)) {
+      setRegError('An account with this official FDA email already exists.');
+      return;
+    }
 
     const newUser: UserAccount = {
       id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -237,6 +289,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
       newUser,
       `New FDA account registered: ${newUser.firstName} ${newUser.lastName} as ${newUser.position} (${newUser.office}) with role ${newUser.role}.`
     );
+
+    setRegSuccess(`Account for ${newUser.firstName} ${newUser.lastName} registered successfully! You may now sign in.`);
 
     setRegSuccess('Registration successful! Redirecting to dashboard...');
     setTimeout(() => {

@@ -36,6 +36,7 @@ import { OUTCOMES, STATUSES, FROO_OFFICES, CATEGORIES } from '../data/offices';
 import { logSystemAction } from '../utils/authStorage';
 import { CreateDispatchModal } from './CreateDispatchModal';
 import { DispatchSlipPreviewModal } from './DispatchSlipPreviewModal';
+import { api } from '../api/client';
 
 interface TaskDetailsDrawerProps {
   task: Task | null;
@@ -106,7 +107,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   }, [task]);
 
   // Receive Task handler
-  const handleReceiveTask = () => {
+  const handleReceiveTask = async () => {
+    try {
+      await api.receiveTask(task.id);
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
+
     const formattedNow = formatDateTime(new Date());
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
@@ -139,8 +146,17 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   // Complete Task handler
-  const handleConfirmCompletion = (e: React.FormEvent) => {
+  const handleConfirmCompletion = async (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      await api.completeTask(task.id, {
+        outcome: completionOutcome,
+        remarks: completionRemarks || undefined,
+      });
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
+
     const formattedNow = formatDateTime(new Date());
 
     const newActivity: ActivityItem = {
@@ -176,7 +192,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
   };
 
-  const handleAddActivity = (e: React.FormEvent) => {
+  const handleAddActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actionTitle.trim()) return;
 
@@ -189,6 +205,16 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     if (newStatus === 'Open' && (task.receivedAt || task.status !== 'Open') && !isSuperOrAdmin) {
       alert('Action restricted: Ordinary users are not authorized to revert a received task back to Open status.');
       return;
+    }
+
+    try {
+      await api.addTaskActivity(task.id, {
+        action: actionTitle.trim(),
+        notes: activityNotes.trim() || undefined,
+        newStatus,
+      });
+    } catch {
+      // Fallback to local state when local MySQL container is offline
     }
 
     const newActivity: ActivityItem = {
@@ -250,7 +276,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     setIsEditingDetails(false);
   };
 
-  const handleSaveDispatch = (slip: DispatchSlip) => {
+  const handleSaveDispatch = async (slip: DispatchSlip) => {
     const existingIndex = (task.dispatchSlips || []).findIndex((s) => s.id === slip.id);
     let updatedSlips: DispatchSlip[];
     let actionText = '';
@@ -260,6 +286,11 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       updatedSlips[existingIndex] = slip;
       actionText = `Dispatch slip ${slip.ctrlNo} updated. Status: ${slip.status}.`;
     } else {
+      try {
+        await api.createDispatch(task.id, slip);
+      } catch {
+        // Fallback to local state when local MySQL container is offline
+      }
       updatedSlips = [slip, ...(task.dispatchSlips || [])];
       actionText = `Dispatch slip ${slip.ctrlNo} generated for ${slip.teamLeader}. Status: ${slip.status}.`;
     }
@@ -307,15 +338,15 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     if (currentUser.role === 'SUPERADMIN') return { canApprove: true };
 
     if (slip.status === 'Pending Regional Supervisor Approval') {
-      // Allowed: Regional Supervisor of that region, Admin (ODDG-FROO), or Superadmin
-      if (currentUser.role === 'ADMIN') return { canApprove: true };
+      // Allowed: Regional Supervisor of that region, Cluster Director, Admin (ODDG-FROO), or Superadmin
+      if (currentUser.role === 'ADMIN' || currentUser.role === 'CLUSTER_DIRECTOR') return { canApprove: true };
       if (currentUser.role === 'REGIONAL_SUPERVISOR') {
         if (currentUser.office.toLowerCase().includes(task.region.toLowerCase()) || task.region.toLowerCase().includes(currentUser.office.toLowerCase())) {
           return { canApprove: true };
         }
         return { canApprove: false, reason: `Requires Supervisor of ${task.region}` };
       }
-      return { canApprove: false, reason: 'Requires Regional Supervisor or ODDG-FROO approval' };
+      return { canApprove: false, reason: 'Requires RS / CD or ODDG-FROO approval' };
     }
 
     if (slip.status === 'Pending ODDG Approval') {
@@ -329,7 +360,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     return { canApprove: false };
   };
 
-  const handleApproveDispatchSlip = (slip: DispatchSlip) => {
+  const handleApproveDispatchSlip = async (slip: DispatchSlip) => {
+    try {
+      await api.approveDispatch(slip.id);
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
+
     // Preserve existing designated approvedBy name and position regardless of who approves
     const designatedName = slip.approvedBy?.name || 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
     const designatedTitle = slip.approvedBy?.title || 'Deputy Director General - Field Regulatory Operations Office';
@@ -377,9 +414,15 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
   };
 
-  const handleRejectDispatchSlip = (slip: DispatchSlip) => {
+  const handleRejectDispatchSlip = async (slip: DispatchSlip) => {
     const reason = prompt('Please enter the reason for rejecting this dispatch request:');
     if (!reason) return;
+
+    try {
+      await api.rejectDispatch(slip.id, reason);
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
 
     const updatedSlip: DispatchSlip = {
       ...slip,
@@ -934,7 +977,11 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                                   : 'bg-slate-100 text-slate-800 border-slate-300'
                               }`}
                             >
-                              {slip.status}
+                              {slip.status === 'Pending Regional Supervisor Approval'
+                                ? 'Pending RS / CD Approval (Standard Dispatch)'
+                                : slip.status === 'Pending ODDG Approval'
+                                ? 'Pending ODDG FROO Approval (RS and CD Dispatch)'
+                                : slip.status}
                             </span>
                           </div>
                           <span className="text-[11px] text-slate-500 block mt-1">
