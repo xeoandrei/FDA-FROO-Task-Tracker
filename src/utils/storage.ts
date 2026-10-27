@@ -13,10 +13,11 @@ export function getStoredTasks(): Task[] {
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed.map((t) => {
         const init = INITIAL_TASKS.find((it) => it.id === t.id);
-        if ((!t.dispatchSlips || t.dispatchSlips.length === 0) && init?.dispatchSlips) {
-          return { ...t, dispatchSlips: init.dispatchSlips };
-        }
-        return { ...t, dispatchSlips: t.dispatchSlips || [] };
+        const dtn = t.dtn || init?.dtn;
+        const slips = (!t.dispatchSlips || t.dispatchSlips.length === 0) && init?.dispatchSlips
+          ? init.dispatchSlips
+          : (t.dispatchSlips || []);
+        return { ...t, dtn, dispatchSlips: slips };
       });
     }
     return INITIAL_TASKS;

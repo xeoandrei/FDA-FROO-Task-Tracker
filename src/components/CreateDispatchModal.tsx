@@ -84,13 +84,15 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   const [vehiclePlateNumber, setVehiclePlateNumber] = useState(existingSlip?.vehiclePlateNumber || 'AVANZA SAB 9141');
 
   // Officials recommendation & approval defaults based on roles
-  const isStandardStaff = currentUser?.role === 'STANDARD' || (currentUser?.role as string) === 'RANK_AND_FILE';
+  const isStandardStaff = Boolean(
+    currentUser && (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE')
+  );
 
-  const defaultRecommendedName = isStandardStaff
+  const defaultRecommendedName = isStandardStaff && currentUser
     ? `${currentUser.firstName.toUpperCase()} ${currentUser.middleInitial ? currentUser.middleInitial.toUpperCase() + ' ' : ''}${currentUser.lastName.toUpperCase()}`
     : 'GOMEL C. GABUNA, LLB, MDM, CESE';
 
-  const defaultRecommendedTitle = isStandardStaff
+  const defaultRecommendedTitle = isStandardStaff && currentUser
     ? `${currentUser.position}, ${currentUser.office}`
     : 'Executive Assistant Designate for FROO, Director II, NLC';
 

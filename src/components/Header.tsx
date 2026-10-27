@@ -26,7 +26,6 @@ interface HeaderProps {
   onOpenSystemLogs: () => void;
   onOpenRegionalOverview: () => void;
   onExportCsv: () => void;
-  onResetData: () => void;
   selectedRegionFilter: string;
   onSelectRegionFilter: (region: string) => void;
   allowedRegions?: string[];
@@ -43,7 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSystemLogs,
   onOpenRegionalOverview,
   onExportCsv,
-  onResetData,
   selectedRegionFilter,
   onSelectRegionFilter,
   allowedRegions,
@@ -79,27 +77,6 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           {currentUser ? (
             <>
-              {/* Quick Persona Switcher for easy testing */}
-              {allStaffUsers.length > 0 && onSwitchUser && (
-                <div className="hidden lg:flex items-center gap-1.5 text-xs text-emerald-200 mr-2">
-                  <span className="text-[11px] text-emerald-300/80">Switch Demo Staff:</span>
-                  <select
-                    value={currentUser.id}
-                    onChange={(e) => {
-                      const target = allStaffUsers.find((u) => u.id === e.target.value);
-                      if (target) onSwitchUser(target);
-                    }}
-                    className="bg-emerald-950/80 text-white text-[11px] border border-emerald-700/60 rounded px-2 py-0.5 focus:outline-none cursor-pointer"
-                  >
-                    {allStaffUsers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.firstName} {u.lastName} ({u.role} - {u.office})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               {/* User details badge */}
               <div className="flex items-center gap-2 bg-emerald-950/90 border border-emerald-700/70 rounded-lg px-2.5 py-1 text-xs text-white">
                 <span
@@ -138,16 +115,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </>
           ) : null}
-
-          {/* Reset Demo Data button */}
-          <button
-            onClick={onResetData}
-            className="flex items-center gap-1 text-emerald-200 hover:text-white px-2 py-1 text-xs hover:bg-white/10 rounded transition cursor-pointer ml-1"
-            title="Reset default operational tasks"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span className="hidden xl:inline">Reset Tasks</span>
-          </button>
         </div>
       </div>
 

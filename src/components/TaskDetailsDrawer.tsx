@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Calendar,
@@ -46,6 +46,7 @@ interface TaskDetailsDrawerProps {
   currentPersona?: FrooUserPersona;
   currentUser?: UserAccount | null;
   allTasks?: Task[];
+  onPromptReceiveTask?: (task: Task) => void;
 }
 
 export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
@@ -57,6 +58,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   currentPersona,
   currentUser,
   allTasks = [],
+  onPromptReceiveTask,
 }) => {
   if (!isOpen || !task) return null;
 
@@ -83,12 +85,25 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
   // Edit fields mode
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editDtn, setEditDtn] = useState(task.dtn || '');
   const [editScheduledDate, setEditScheduledDate] = useState(task.scheduledDate || '');
   const [editLocation, setEditLocation] = useState(task.location || '');
   const [editOutcome, setEditOutcome] = useState(task.outcome || 'Scheduled');
   const [editRemarks, setEditRemarks] = useState(task.remarks || '');
   const [editAssignedTo, setEditAssignedTo] = useState(task.assignedTo);
   const [editRegion, setEditRegion] = useState(task.region);
+
+  useEffect(() => {
+    if (task) {
+      setEditDtn(task.dtn || '');
+      setEditScheduledDate(task.scheduledDate || '');
+      setEditLocation(task.location || '');
+      setEditOutcome(task.outcome || 'Scheduled');
+      setEditRemarks(task.remarks || '');
+      setEditAssignedTo(task.assignedTo);
+      setEditRegion(task.region);
+    }
+  }, [task]);
 
   // Receive Task handler
   const handleReceiveTask = () => {
@@ -170,6 +185,12 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
         ? (activityStatusChange as TaskStatus)
         : undefined;
 
+    const isSuperOrAdmin = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
+    if (newStatus === 'Open' && (task.receivedAt || task.status !== 'Open') && !isSuperOrAdmin) {
+      alert('Action restricted: Ordinary users are not authorized to revert a received task back to Open status.');
+      return;
+    }
+
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
       action: actionTitle.trim(),
@@ -206,6 +227,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   const handleSaveOperationalDetails = () => {
     const updated: Task = {
       ...task,
+      dtn: editDtn.trim() || undefined,
       scheduledDate: editScheduledDate,
       location: editLocation,
       outcome: editOutcome,
@@ -416,7 +438,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
             <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase block">
-              FROO Task File • {task.id}
+              FROO Task File • {task.id} {task.dtn ? `• DTN: ${task.dtn}` : ''}
             </span>
             <h2 className="text-base font-bold text-slate-900 line-clamp-1">
               Task Details
@@ -467,7 +489,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
           </div>
 
           {/* TASK LIFECYCLE ACTION BANNER (Open -> Receive -> In Progress -> Complete) */}
-          {task.status === 'Open' && (
+          {task.status === 'Open' && !task.receivedAt && (
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 shadow-xs">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -478,11 +500,17 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                     Task Awaiting Assignee Acceptance
                   </h4>
                   <p className="text-[11.5px] text-blue-800 mt-0.5 leading-snug">
-                    Assigned to <strong>{task.assignedTo}</strong> ({task.region}). Click Receive Task to accept responsibility and advance status to <em>In Progress</em>.
+                    Assigned to <strong>{task.assignedTo}</strong> ({task.region}). Click Receive Task to confirm acceptance and advance status to <em>In Progress</em>.
                   </p>
                   <div className="mt-3">
                     <button
-                      onClick={handleReceiveTask}
+                      onClick={() => {
+                        if (onPromptReceiveTask) {
+                          onPromptReceiveTask(task);
+                        } else {
+                          handleReceiveTask();
+                        }
+                      }}
                       className="px-4 py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 className="w-4 h-4" />
@@ -490,6 +518,18 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {task.receivedAt && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="text-xs text-emerald-900">
+                <span className="font-bold">Official Receipt Acknowledged</span>
+                <span className="block text-[11px] text-emerald-700">
+                  Received by <strong>{task.receivedBy || task.assignedTo}</strong> on {task.receivedAt ? new Date(task.receivedAt).toLocaleDateString() : 'N/A'}.
+                </span>
               </div>
             </div>
           )}
@@ -569,6 +609,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
             </div>
 
             <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">DTN (Tracking No.)</span>
+              <span className="font-mono font-semibold text-emerald-800 text-xs">
+                {task.dtn || 'None recorded'}
+              </span>
+            </div>
+
+            <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Priority</span>
               <span className="font-semibold text-slate-800 text-xs">{task.priority}</span>
             </div>
@@ -592,14 +639,29 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
             {isEditingDetails ? (
               <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in fade-in">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Assigned Personnel</label>
-                  <input
-                    type="text"
-                    value={editAssignedTo}
-                    onChange={(e) => setEditAssignedTo(e.target.value)}
-                    className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">DTN (14 digits)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={14}
+                      value={editDtn}
+                      onChange={(e) => setEditDtn(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                      placeholder="14-digit Document Tracking No."
+                      className="w-full text-xs font-mono border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Assigned Personnel</label>
+                    <input
+                      type="text"
+                      value={editAssignedTo}
+                      onChange={(e) => setEditAssignedTo(e.target.value)}
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -773,7 +835,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                   className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:border-[#056839]"
                 >
                   <option value="no-change">Leave Status: {task.status}</option>
-                  {STATUSES.map((s) => (
+                  {STATUSES.filter((s) => {
+                    const isSuperOrAdmin = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
+                    if (s === 'Open' && (task.receivedAt || task.status !== 'Open') && !isSuperOrAdmin) {
+                      return false;
+                    }
+                    return true;
+                  }).map((s) => (
                     <option key={s} value={s}>Change Status to: {s}</option>
                   ))}
                 </select>
@@ -1106,7 +1174,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
         isOpen={Boolean(previewDispatchSlip)}
         onClose={() => setPreviewDispatchSlip(null)}
         slip={previewDispatchSlip}
-        />
+        task={task}
+      />
     </div>
   );
 };

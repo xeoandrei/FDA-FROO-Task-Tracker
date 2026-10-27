@@ -10,6 +10,7 @@ interface TaskListProps {
   onQuickStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
   onReceiveTask?: (task: Task) => void;
   currentUserName?: string;
+  activeView?: 'MY_TASKS' | 'TASKS_TO_RECEIVE' | 'ALL_TASKS';
 }
 
 export const TaskList: React.FC<TaskListProps> = ({
@@ -19,6 +20,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   onQuickStatusChange,
   onReceiveTask,
   currentUserName,
+  activeView = 'ALL_TASKS',
 }) => {
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
@@ -101,9 +103,13 @@ export const TaskList: React.FC<TaskListProps> = ({
               <tr>
                 <td colSpan={9} className="py-12 text-center text-slate-400">
                   <div className="max-w-xs mx-auto text-center">
-                    <p className="text-sm font-medium text-slate-600">No tasks found</p>
+                    <p className="text-sm font-semibold text-slate-700">No tasks found</p>
                     <p className="text-xs text-slate-400 mt-1">
-                      No operational tasks in this scope or matching your filters.
+                      {activeView === 'MY_TASKS'
+                        ? 'You currently have no tasks assigned or requiring your direct action in this filter.'
+                        : activeView === 'TASKS_TO_RECEIVE'
+                        ? 'No dispatched tasks currently awaiting receipt by authorized recipient.'
+                        : 'No operational tasks in this scope or matching your filters.'}
                     </p>
                   </div>
                 </td>
@@ -126,8 +132,16 @@ export const TaskList: React.FC<TaskListProps> = ({
                         <span className="font-semibold text-[#056839] group-hover:underline line-clamp-2">
                           {task.taskTitle}
                         </span>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
                           <span>ID: {task.id}</span>
+                          {task.dtn && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/80 font-medium">
+                                DTN: {task.dtn}
+                              </span>
+                            </>
+                          )}
                           <span>•</span>
                           <span>{task.activityHistory?.length || 0} logs</span>
                           {task.dispatchSlips && task.dispatchSlips.length > 0 && (
@@ -155,11 +169,15 @@ export const TaskList: React.FC<TaskListProps> = ({
                     {/* Assigned To */}
                     <td className="py-3.5 px-4 text-slate-800 font-medium whitespace-nowrap">
                       <div>{task.assignedTo}</div>
-                      {task.status === 'Open' && (
+                      {task.status === 'Open' && !task.receivedAt ? (
                         <span className="text-[10px] text-amber-700 font-semibold block">
                           Awaiting Receipt
                         </span>
-                      )}
+                      ) : task.receivedBy ? (
+                        <span className="text-[10px] text-emerald-700 block truncate max-w-[140px]" title={`Received by ${task.receivedBy}`}>
+                          Recv: {task.receivedBy}
+                        </span>
+                      ) : null}
                     </td>
 
                     {/* Region */}
@@ -176,15 +194,15 @@ export const TaskList: React.FC<TaskListProps> = ({
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {getStatusBadge(task.status)}
-                        {task.status === 'Open' && onReceiveTask && (
+                        {task.status === 'Open' && !task.receivedAt && onReceiveTask && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onReceiveTask(task);
                             }}
-                            className="text-[11px] bg-[#056839] hover:bg-[#04522d] text-white px-2 py-0.5 rounded font-semibold transition cursor-pointer shadow-2xs"
-                            title="Receive and start this task"
+                            className="text-[11px] bg-[#056839] hover:bg-[#04522d] text-white px-2.5 py-0.5 rounded font-bold transition cursor-pointer shadow-2xs inline-flex items-center gap-1 active:scale-95"
+                            title="Confirm receipt and accept this task"
                           >
                             Receive
                           </button>

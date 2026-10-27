@@ -3,6 +3,7 @@ import { Task } from '../types/task';
 export const INITIAL_TASKS: Task[] = [
   {
     id: 'FROO-2026-001',
+    dtn: '20260808001001',
     taskTitle: 'Conduct inspection of ABC Manufacturing',
     category: 'Inspection',
     origin: 'FROO',
@@ -89,6 +90,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-002',
+    dtn: '20260811002045',
     taskTitle: 'Investigate reported establishment',
     category: 'Investigation',
     origin: 'ODDG-FROO',
@@ -118,6 +120,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-003',
+    dtn: '20260805003112',
     taskTitle: 'Follow up on external referral',
     category: 'Referral',
     origin: 'External',
@@ -163,6 +166,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-004',
+    dtn: '20260806004523',
     taskTitle: 'Conduct follow-up investigation',
     category: 'Investigation',
     origin: 'Regional Office',
@@ -200,6 +204,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-005',
+    dtn: '20260728005891',
     taskTitle: 'Post-market sampling of pharmaceutical products',
     category: 'Post-Marketing Surveillance',
     origin: 'FROO',
@@ -245,6 +250,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-006',
+    dtn: '20260810006234',
     taskTitle: 'Submit inspection report',
     category: 'Report',
     origin: 'Regional Office',
@@ -274,6 +280,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-007',
+    dtn: '20260812007456',
     taskTitle: 'Licensing audit of regional cold-chain drug distributor',
     category: 'Licensing & Compliance',
     origin: 'ODDG-FROO',
@@ -311,6 +318,7 @@ export const INITIAL_TASKS: Task[] = [
   },
   {
     id: 'FROO-2026-008',
+    dtn: '20260809008901',
     taskTitle: 'Monitor compliance of traditional herbal manufacturers',
     category: 'Post-Marketing Surveillance',
     origin: 'Regional Office',

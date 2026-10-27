@@ -32,6 +32,14 @@ import { TaskDetailsDrawer } from './components/TaskDetailsDrawer';
 import { RegionalOverviewModal } from './components/RegionalOverviewModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import { SystemLogsModal } from './components/SystemLogsModal';
+import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
+import { ReceiveTaskModal } from './components/ReceiveTaskModal';
+import {
+  isUserAssignedToTask,
+  isTaskRequiringUserAction,
+  validateCanReceiveTask,
+} from './utils/taskAuthorization';
+import { ActivityItem } from './types/task';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -48,6 +56,10 @@ export default function App() {
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isSystemLogsOpen, setIsSystemLogsOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Task views state (Defaults to 'MY_TASKS' per user specification)
+  const [activeView, setActiveView] = useState<TaskViewType>('MY_TASKS');
+  const [taskToConfirmReceive, setTaskToConfirmReceive] = useState<Task | null>(null);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -120,6 +132,7 @@ export default function App() {
   // Login handler
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUserState(user);
+    setActiveView('MY_TASKS');
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
   };
 
@@ -153,6 +166,7 @@ export default function App() {
     };
     setCurrentUser(updated);
     setCurrentUserState(updated);
+    setActiveView('MY_TASKS');
     showToast(`Switched perspective to ${updated.firstName} ${updated.lastName} (${updated.role})`);
   };
 
@@ -172,21 +186,85 @@ export default function App() {
     }
   };
 
-  // Filtered Tasks logic (Strictly enforces Table Scoped Visibility by default)
-  const filteredTasks = useMemo(() => {
+  // 1. Jurisdiction base tasks (filtered by user's authorized role and regions)
+  const jurisdictionTasks = useMemo(() => {
     return tasks.filter((task) => {
-      // 1. Strict Jurisdiction Filter
-      // If user is not superadmin/admin, enforce their allowed regional scope
-      if (currentUser && currentUser.role !== 'SUPERADMIN' && currentUser.role !== 'ADMIN') {
-        const isAllowed = allowedRegions.some(
+      if (!currentUser) return true;
+      if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') return true;
+      return allowedRegions.some(
+        (ar) =>
+          task.region.toLowerCase().includes(ar.toLowerCase()) ||
+          ar.toLowerCase().includes(task.region.toLowerCase())
+      );
+    });
+  }, [tasks, currentUser, allowedRegions]);
+
+  // View 1: My Tasks (Tasks assigned to or requiring action from the current user)
+  const myTasks = useMemo(() => {
+    if (!currentUser) return jurisdictionTasks;
+    return jurisdictionTasks.filter((task) => {
+      return isUserAssignedToTask(task, currentUser) || isTaskRequiringUserAction(task, currentUser);
+    });
+  }, [jurisdictionTasks, currentUser]);
+
+  // View 2: Tasks to Receive (Dispatched tasks awaiting receipt by the authorized recipient)
+  const tasksToReceive = useMemo(() => {
+    if (!currentUser) return jurisdictionTasks.filter((t) => t.status === 'Open' && !t.receivedAt);
+    return jurisdictionTasks.filter((task) => {
+      // Must be awaiting receipt
+      if (task.status !== 'Open' || task.receivedAt) return false;
+
+      // For standard staff: must be assigned to them or in their regional office
+      if (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE') {
+        return (
+          isUserAssignedToTask(task, currentUser) ||
+          currentUser.office.toLowerCase().includes(task.region.toLowerCase()) ||
+          task.region.toLowerCase().includes(currentUser.office.toLowerCase())
+        );
+      }
+
+      // For regional supervisor: tasks in their regional office
+      if (currentUser.role === 'REGIONAL_SUPERVISOR') {
+        return (
+          currentUser.office.toLowerCase().includes(task.region.toLowerCase()) ||
+          task.region.toLowerCase().includes(currentUser.office.toLowerCase())
+        );
+      }
+
+      // For Cluster Director: tasks in cluster regions
+      if (currentUser.role === 'CLUSTER_DIRECTOR') {
+        return allowedRegions.some(
           (ar) =>
             task.region.toLowerCase().includes(ar.toLowerCase()) ||
             ar.toLowerCase().includes(task.region.toLowerCase())
         );
-        if (!isAllowed) return false;
       }
 
-      // 2. Region Dropdown Filter
+      // For Admin / Superadmin: all dispatched tasks awaiting receipt in jurisdiction
+      return true;
+    });
+  }, [jurisdictionTasks, currentUser, allowedRegions]);
+
+  // View 3: All Tasks (Tasks visible according to the user's existing role and jurisdiction)
+  const allTasks = jurisdictionTasks;
+
+  // Active view base tasks
+  const activeViewTasks = useMemo(() => {
+    switch (activeView) {
+      case 'MY_TASKS':
+        return myTasks;
+      case 'TASKS_TO_RECEIVE':
+        return tasksToReceive;
+      case 'ALL_TASKS':
+      default:
+        return allTasks;
+    }
+  }, [activeView, myTasks, tasksToReceive, allTasks]);
+
+  // Filtered Tasks logic (reflects active view + dropdown filters)
+  const filteredTasks = useMemo(() => {
+    return activeViewTasks.filter((task) => {
+      // 1. Region Dropdown Filter
       if (selectedRegion !== 'All') {
         const match =
           task.region.toLowerCase().includes(selectedRegion.toLowerCase()) ||
@@ -194,7 +272,7 @@ export default function App() {
         if (!match) return false;
       }
 
-      // 3. Search Query
+      // 2. Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesTitle = task.taskTitle.toLowerCase().includes(query);
@@ -202,27 +280,28 @@ export default function App() {
         const matchesLocation = (task.location || '').toLowerCase().includes(query);
         const matchesDesc = (task.description || '').toLowerCase().includes(query);
         const matchesId = task.id.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesAssigned && !matchesLocation && !matchesDesc && !matchesId) {
+        const matchesDtn = (task.dtn || '').toLowerCase().includes(query);
+        if (!matchesTitle && !matchesAssigned && !matchesLocation && !matchesDesc && !matchesId && !matchesDtn) {
           return false;
         }
       }
 
-      // 4. Category
+      // 3. Category
       if (selectedCategory !== 'All' && task.category !== selectedCategory) {
         return false;
       }
 
-      // 5. Origin
+      // 4. Origin
       if (selectedOrigin !== 'All' && task.origin !== selectedOrigin) {
         return false;
       }
 
-      // 6. Status
+      // 5. Status
       if (selectedStatus !== 'All' && task.status !== selectedStatus) {
         return false;
       }
 
-      // 7. Priority
+      // 6. Priority
       if (selectedPriority !== 'All' && task.priority !== selectedPriority) {
         return false;
       }
@@ -230,9 +309,7 @@ export default function App() {
       return true;
     });
   }, [
-    tasks,
-    currentUser,
-    allowedRegions,
+    activeViewTasks,
     selectedRegion,
     searchQuery,
     selectedCategory,
@@ -305,29 +382,42 @@ export default function App() {
     }
   };
 
-  // Quick "Receive Task" handler (Open -> In Progress)
-  const handleReceiveTask = (taskToReceive: Task) => {
+  // Trigger receipt confirmation modal
+  const handlePromptReceiveTask = (taskToReceive: Task) => {
+    setTaskToConfirmReceive(taskToReceive);
+  };
+
+  // Confirmed Receive Task handler with validation, identity & timestamp recording
+  const handleConfirmAcceptTask = (taskToReceive: Task) => {
+    const validation = validateCanReceiveTask(taskToReceive, currentUser);
+    if (!validation.allowed) {
+      showToast(validation.reason || 'You are not authorized to receive this task.');
+      setTaskToConfirmReceive(null);
+      return;
+    }
+
     const actorName = currentUser
       ? `${currentUser.firstName} ${currentUser.lastName}`
       : taskToReceive.assignedTo;
     const actorOffice = currentUser?.office || taskToReceive.region;
+    const actorPosition = currentUser?.position || 'Authorized Staff';
 
     const formattedNow = formatDateTime(new Date());
-    const newActivity = {
+    const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
       action: `Task received and accepted into In-Progress execution.`,
       actor: actorName,
       actorOffice: actorOffice,
       date: formattedNow,
-      notes: `Official receipt recorded by ${actorName}. Field regulatory operation initiated.`,
-      newStatus: 'In Progress' as TaskStatus,
+      notes: `Official receipt recorded by ${actorName} (${actorPosition}, ${actorOffice}). Field regulatory operation initiated.`,
+      newStatus: 'In Progress',
     };
 
     const updated: Task = {
       ...taskToReceive,
       status: 'In Progress',
       receivedAt: new Date().toISOString(),
-      receivedBy: actorName,
+      receivedBy: `${actorName} (${actorPosition}, ${actorOffice})`,
       activityHistory: [newActivity, ...(taskToReceive.activityHistory || [])],
     };
 
@@ -340,27 +430,16 @@ export default function App() {
       logSystemAction(
         'TASK_RECEIVED',
         currentUser,
-        `Task "${taskToReceive.taskTitle}" received and accepted by ${actorName}. Status updated to In Progress.`,
+        `Task "${taskToReceive.taskTitle}" (DTN: ${taskToReceive.dtn || 'N/A'}) received and accepted by ${actorName}. Status updated to In Progress.`,
         { targetEntityId: taskToReceive.id, targetEntityName: taskToReceive.taskTitle }
       );
     }
 
-    showToast(`Task received! Status advanced to "In Progress".`);
+    setTaskToConfirmReceive(null);
+    showToast(`Task "${taskToReceive.taskTitle}" officially received & accepted into execution.`);
   };
 
-  // Reset to default sample dataset
-  const handleResetData = () => {
-    if (
-      confirm(
-        'Are you sure you want to reset all tasks and dispatch slips to the original FDA FROO demo data?'
-      )
-    ) {
-      const fresh = resetStoredTasks();
-      setTasks(fresh);
-      setSelectedTask(null);
-      showToast('Task tracker data has been reset to defaults.');
-    }
-  };
+
 
   // If not logged in, render the official FDA FROO Landing Page
   if (!currentUser) {
@@ -386,20 +465,30 @@ export default function App() {
         onOpenSystemLogs={() => setIsSystemLogsOpen(true)}
         onOpenRegionalOverview={() => setIsRegionalOverviewOpen(true)}
         onExportCsv={() => exportTasksToCsv(filteredTasks)}
-        onResetData={handleResetData}
         selectedRegionFilter={selectedRegion}
         onSelectRegionFilter={setSelectedRegion}
         allowedRegions={allowedRegions}
         scopeLabel={scopeLabel}
         allStaffUsers={allStaffUsers}
-        onSwitchUser={handleSwitchUser}
       />
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Metric Cards (matching screenshot 1) */}
+        {/* Separate Task Views Tabs (My Tasks, Tasks to Receive, All Tasks) */}
+        <TaskViewTabs
+          activeView={activeView}
+          onSelectView={(v) => {
+            setActiveView(v);
+            setSelectedStatus('All');
+          }}
+          myTasksCount={myTasks.length}
+          tasksToReceiveCount={tasksToReceive.length}
+          allTasksCount={allTasks.length}
+        />
+
+        {/* Metric Cards - counts reflect active view base tasks */}
         <StatsCards
-          tasks={filteredTasks}
+          tasks={activeViewTasks}
           activeStatusFilter={selectedStatus}
           onSelectStatusFilter={setSelectedStatus}
         />
@@ -430,8 +519,9 @@ export default function App() {
           tasks={filteredTasks}
           onSelectTask={(task) => setSelectedTask(task)}
           selectedTaskId={selectedTask?.id}
-          onReceiveTask={handleReceiveTask}
+          onReceiveTask={handlePromptReceiveTask}
           currentUserName={`${currentUser.firstName} ${currentUser.lastName}`}
+          activeView={activeView}
         />
 
         {/* Footer Note */}
@@ -451,6 +541,7 @@ export default function App() {
         onCreate={handleCreateTask}
         currentUser={currentUser}
         allowedRegions={allowedRegions}
+        allStaffUsers={allStaffUsers}
       />
 
       {/* Task Details Drawer (matching screenshots 3 & 4 + Dispatch & Approvals) */}
@@ -462,6 +553,16 @@ export default function App() {
         onDeleteTask={handleDeleteTask}
         currentUser={currentUser}
         allTasks={tasks}
+        onPromptReceiveTask={handlePromptReceiveTask}
+      />
+
+      {/* Receive and Accept Task Confirmation Modal */}
+      <ReceiveTaskModal
+        isOpen={Boolean(taskToConfirmReceive)}
+        onClose={() => setTaskToConfirmReceive(null)}
+        task={taskToConfirmReceive}
+        currentUser={currentUser}
+        onConfirmAccept={handleConfirmAcceptTask}
       />
 
       {/* Regional Workload & Directory Modal */}
