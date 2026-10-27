@@ -251,7 +251,7 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
               {/* Main Content framed within official letterhead margins */}
               <div className="relative z-10 pt-[132px] pb-[96px] px-[64px] flex-1 flex flex-col text-[12.5px] leading-[1.38]">
                 
-                {/* Top Row: CTRL No. & DTN */}
+                {/* Top Row: CTRL No. */}
                 <div className="flex items-center justify-between font-bold text-[13px] tracking-wide mb-1">
                   <div>
                     CTRL No.:{' '}
@@ -259,11 +259,6 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                       {slip.ctrlNo}
                     </span>
                   </div>
-                  {dtn && (
-                    <div className="text-[11.5px] font-sans font-semibold text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-300">
-                      DTN: <span className="font-mono font-bold text-slate-900">{dtn}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Document Title */}
@@ -472,11 +467,6 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                       <div className="text-[11px] text-slate-800 font-medium">
                         {approvedBy.title}
                       </div>
-                      {approvedBy.signatureDate && (
-                        <div className="text-[10px] text-slate-600 italic mt-0.5">
-                          Date: {approvedBy.signatureDate}
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -521,11 +511,6 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                         {slip.ctrlNo} - ANNEX A
                       </span>
                     </div>
-                    {dtn && (
-                      <div className="text-[11.5px] font-sans font-semibold text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-300">
-                        DTN: <span className="font-mono font-bold text-slate-900">{dtn}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Annex Title */}

@@ -17,8 +17,7 @@ export type DispatchStatus =
   | 'Pending Regional Supervisor Approval'
   | 'Pending ODDG Approval'
   | 'Approved'
-  | 'Rejected'
-  | 'Dispatched';
+  | 'Rejected';
 
 export interface DispatchSlip {
   id: string;

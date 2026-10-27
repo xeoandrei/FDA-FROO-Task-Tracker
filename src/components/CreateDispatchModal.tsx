@@ -213,7 +213,6 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       approvedBy: {
         name: approvedByName.trim(),
         title: approvedByTitle.trim(),
-        signatureDate: status === 'Approved' ? new Date().toLocaleDateString('en-US') : undefined,
         signedBy: status === 'Approved' ? (currentUser ? currentUser.email : 'ODDG-FROO') : undefined,
       },
       status,
@@ -517,7 +516,6 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                     Pending ODDG Approval (Supervisor & Cluster Director Requests)
                   </option>
                   <option value="Approved">Approved (Authorized for Field Deployment)</option>
-                  <option value="Dispatched">Dispatched (Team in Transit)</option>
                   <option value="Draft">Draft</option>
                 </select>
               </div>

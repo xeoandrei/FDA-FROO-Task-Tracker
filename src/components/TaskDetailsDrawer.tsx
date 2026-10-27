@@ -293,10 +293,17 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   // Dispatch Approval / Rejection logic based on specified hierarchy:
+  // Standard user accounts are NOT allowed to approve dispatches.
   // if standard staff -> regional supervisors can approve
   // if regional supervisors & cluster directors -> oddg froo only can approve
   const canApproveSlip = (slip: DispatchSlip): { canApprove: boolean; reason?: string } => {
-    if (!currentUser) return { canApprove: true };
+    if (!currentUser) return { canApprove: false, reason: 'Authentication required' };
+
+    // Standard / Rank & File staff are strictly barred from approving dispatch slips
+    if (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE') {
+      return { canApprove: false, reason: 'Standard staff accounts are not authorized to approve dispatch slips.' };
+    }
+
     if (currentUser.role === 'SUPERADMIN') return { canApprove: true };
 
     if (slip.status === 'Pending Regional Supervisor Approval') {
@@ -323,17 +330,21 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   const handleApproveDispatchSlip = (slip: DispatchSlip) => {
-    const approverTitle = currentUser ? currentUser.position : 'Deputy Director General, FROO';
-    const approverName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
+    // Preserve existing designated approvedBy name and position regardless of who approves
+    const designatedName = slip.approvedBy?.name || 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
+    const designatedTitle = slip.approvedBy?.title || 'Deputy Director General - Field Regulatory Operations Office';
+
+    const actorDisplayName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Authorized Official';
+    const actorPosition = currentUser ? currentUser.position : 'Officer';
 
     const updatedSlip: DispatchSlip = {
       ...slip,
       status: 'Approved',
       approvedBy: {
-        name: approverName.toUpperCase(),
-        title: approverTitle,
-        signatureDate: new Date().toLocaleDateString('en-US'),
+        name: designatedName,
+        title: designatedTitle,
         signedBy: currentUser?.email || 'ODDG-FROO',
+        // Note: signatureDate removed per official dispatch formatting requirements
       },
     };
 
@@ -341,8 +352,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
-      action: `Official Dispatch Slip ${slip.ctrlNo} APPROVED by ${approverName} (${approverTitle}).`,
-      actor: approverName,
+      action: `Official Dispatch Slip ${slip.ctrlNo} APPROVED by ${actorDisplayName} (${actorPosition}). Signatory: ${designatedName}.`,
+      actor: actorDisplayName,
       actorOffice: actorOffice,
       date: formatDateTime(new Date()),
       notes: `Authorization granted for field deployment on ${slip.dispatchDate}.`,
