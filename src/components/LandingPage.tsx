@@ -79,104 +79,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
         return;
       }
     } catch (apiErr: any) {
-      if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
-        setLoginError(apiErr.message);
-        return;
+      const errorMsg = apiErr.message || 'Login failed';
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        setLoginError('Unable to connect to the FROO backend API server at http://localhost:4000. Please ensure the backend server and MySQL database are running.');
+      } else {
+        setLoginError(errorMsg);
       }
-    }
-
-    const users = getStoredUsers();
-    const user = users.find(
-      (u) =>
-        u.username.toLowerCase() === identifier ||
-        u.email.toLowerCase() === identifier
-    );
-
-    if (!user) {
-      setLoginError('Account not found. Please verify your credentials or register with an @fda.gov.ph email.');
       return;
     }
-
-    if (user.password && user.password !== loginPassword) {
-      setLoginError('Incorrect password. Please try again.');
-      return;
-    }
-
-    if (user.status === 'deactivated') {
-      setLoginError('This account has been deactivated by the ODDG-FROO Administrator. Contact your supervisor.');
-      return;
-    }
-
-    // Update last login
-    const updatedUser: UserAccount = {
-      ...user,
-      status: 'active',
-      lastLogin: new Date().toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      lastActivity: 'Logged into system',
-    };
-
-    const updatedList = users.map((u) => (u.id === user.id ? updatedUser : u));
-    saveStoredUsers(updatedList);
-    setCurrentUser(updatedUser);
-
-    logSystemAction(
-      'USER_LOGIN',
-      updatedUser,
-      `User ${updatedUser.firstName} ${updatedUser.lastName} (${updatedUser.position}) logged in successfully.`
-    );
-
-    onLoginSuccess(updatedUser);
   };
 
-  // Handle Quick Demo Login
+  // Handle Quick Demo Login through backend authentication
   const handleQuickLogin = async (username: string) => {
+    setLoginError(null);
     try {
-      const res = await api.login(username, 'password123');
+      const res = await api.demoLogin(username);
       if (res && res.user) {
         setCurrentUser(res.user);
         onLoginSuccess(res.user);
         return;
       }
-    } catch {
-      // Fallback
-    }
-
-    const users = getStoredUsers();
-    const target = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-    if (target) {
-      const updatedUser: UserAccount = {
-        ...target,
-        status: 'active',
-        lastLogin: new Date().toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        lastActivity: 'Logged in via quick persona switch',
-      };
-      const updatedList = users.map((u) => (u.id === target.id ? updatedUser : u));
-      saveStoredUsers(updatedList);
-      setCurrentUser(updatedUser);
-
-      logSystemAction(
-        'USER_LOGIN',
-        updatedUser,
-        `Quick sign-in as ${updatedUser.firstName} ${updatedUser.lastName} (${updatedUser.role}).`
-      );
-
-      onLoginSuccess(updatedUser);
+    } catch (apiErr: any) {
+      const errorMsg = apiErr.message || 'Demo authentication failed';
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        setLoginError('Backend API server at http://localhost:4000 is unreachable for demo login.');
+      } else {
+        setLoginError(errorMsg);
+      }
+      setActiveModal('login');
     }
   };
 
-  // Handle Registration
+  // Handle Staff Registration
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError(null);
@@ -185,8 +119,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     const emailTrimmed = regEmail.trim().toLowerCase();
     const usernameTrimmed = regUsername.trim().toLowerCase();
 
-    // Validations
-    if (!usernameTrimmed || !regPassword || !emailTrimmed || !regFirstName || !regLastName) {
+    // Field Validations
+    if (!usernameTrimmed || !regPassword || !emailTrimmed || !regFirstName.trim() || !regLastName.trim()) {
       setRegError('Please complete all required fields.');
       return;
     }
@@ -206,96 +140,48 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    // Office & Cluster logic
-    let finalOffice = regOffice;
-    let finalCluster: ClusterCode | undefined = undefined;
-
-    if (regPosition === 'Cluster Director') {
-      finalOffice = FROO_CLUSTERS[regCluster].name;
-      finalCluster = regCluster;
-    } else if (regPosition === 'Deputy Director General (DDG-FROO)' || regPosition === 'ODDG-FROO Staff') {
-      finalOffice = 'ODDG-FROO';
-    }
-
-    const assignedRole = determineRole(emailTrimmed, finalOffice, regPosition);
-
     try {
-      const created = await api.createUser({
+      const res = await api.register({
         username: usernameTrimmed,
         email: emailTrimmed,
         password: regPassword,
         firstName: regFirstName.trim(),
-        middleInitial: regMiddleInitial.trim() ? (regMiddleInitial.trim().endsWith('.') ? regMiddleInitial.trim() : `${regMiddleInitial.trim()}.`) : '',
+        middleInitial: regMiddleInitial.trim(),
         lastName: regLastName.trim(),
         position: regPosition,
-        office: finalOffice,
-        cluster: finalCluster,
-        role: assignedRole,
+        office: regOffice,
       });
 
-      if (created) {
-        setRegSuccess(`Account for ${regFirstName} ${regLastName} registered successfully in FROO system! You may now sign in.`);
+      if (res && res.user) {
+        setRegSuccess(`Account for ${res.user.firstName} ${res.user.lastName} successfully registered in MySQL database! Redirecting to sign in...`);
+
+        // Synchronize local cached staff list
+        const currentStored = getStoredUsers();
+        if (!currentStored.some((u) => u.id === res.user.id || u.email.toLowerCase() === res.user.email.toLowerCase())) {
+          saveStoredUsers([res.user, ...currentStored]);
+        }
+
+        // Set credentials and transition to login modal
+        setLoginIdentifier(res.user.email);
+        setLoginPassword('');
+        setRegPassword('');
+        setRegConfirmPassword('');
+
+        setTimeout(() => {
+          setActiveModal('login');
+          setRegSuccess(null);
+        }, 1500);
         return;
       }
     } catch (apiErr: any) {
-      if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
-        setRegError(apiErr.message);
-        return;
+      const errorMsg = apiErr.message || 'Registration failed';
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        setRegError('Unable to connect to the FROO backend API server at http://localhost:4000. Please ensure the Express server and MySQL container are running.');
+      } else {
+        setRegError(errorMsg);
       }
-    }
-
-    // Fallback to local
-    const users = getStoredUsers();
-    if (users.some((u) => u.username.toLowerCase() === usernameTrimmed)) {
-      setRegError('This username is already taken. Please choose another.');
       return;
     }
-
-    if (users.some((u) => u.email.toLowerCase() === emailTrimmed)) {
-      setRegError('An account with this official FDA email already exists.');
-      return;
-    }
-
-    const newUser: UserAccount = {
-      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      username: usernameTrimmed,
-      password: regPassword,
-      email: emailTrimmed,
-      firstName: regFirstName.trim(),
-      middleInitial: regMiddleInitial.trim() ? (regMiddleInitial.trim().endsWith('.') ? regMiddleInitial.trim() : `${regMiddleInitial.trim()}.`) : '',
-      lastName: regLastName.trim(),
-      position: regPosition,
-      office: finalOffice,
-      cluster: finalCluster,
-      role: assignedRole,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      lastActivity: 'Registered new FDA staff account',
-    };
-
-    const updatedUsers = [...users, newUser];
-    saveStoredUsers(updatedUsers);
-    setCurrentUser(newUser);
-
-    logSystemAction(
-      'USER_REGISTERED',
-      newUser,
-      `New FDA account registered: ${newUser.firstName} ${newUser.lastName} as ${newUser.position} (${newUser.office}) with role ${newUser.role}.`
-    );
-
-    setRegSuccess(`Account for ${newUser.firstName} ${newUser.lastName} registered successfully! You may now sign in.`);
-
-    setRegSuccess('Registration successful! Redirecting to dashboard...');
-    setTimeout(() => {
-      onLoginSuccess(newUser);
-    }, 1000);
   };
 
   return (
@@ -719,64 +605,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
 
               {/* Position */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Position *</label>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Staff Position *</label>
                 <select
                   value={regPosition}
                   onChange={(e) => setRegPosition(e.target.value as UserPosition)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
                 >
-                  <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO - Inspector)</option>
+                  <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO - Field Inspector)</option>
                   <option value="Licensing Officer">Licensing Officer</option>
                   <option value="Information Officer">Information Officer</option>
                   <option value="Regional Supervisor">Regional Supervisor</option>
-                  <option value="Cluster Director">Cluster Director</option>
-                  <option value="ODDG-FROO Staff">ODDG-FROO Staff (Admin)</option>
-                  <option value="Deputy Director General (DDG-FROO)">Deputy Director General (DDG-FROO)</option>
                 </select>
               </div>
 
-              {/* Conditional Office / Cluster */}
-              {regPosition === 'Cluster Director' ? (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Cluster Jurisdiction *</label>
-                  <select
-                    value={regCluster}
-                    onChange={(e) => setRegCluster(e.target.value as ClusterCode)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
-                  >
-                    {CLUSTERS_LIST.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name} ({c.regions.join(', ')})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : regPosition === 'Deputy Director General (DDG-FROO)' || regPosition === 'ODDG-FROO Staff' ? (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Office</label>
-                  <input
-                    type="text"
-                    disabled
-                    value="ODDG-FROO (Headquarters - Full Administrative Access)"
-                    className="w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-xs text-emerald-300 font-medium"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Regional Field Office *</label>
-                  <select
-                    value={regOffice}
-                    onChange={(e) => setRegOffice(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
-                  >
-                    {FROO_OFFICES.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
-                      <option key={o.id} value={o.code}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Regional Office */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Designated Regional Field Office *</label>
+                <select
+                  value={regOffice}
+                  onChange={(e) => setRegOffice(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
+                >
+                  {FROO_OFFICES.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
+                    <option key={o.id} value={o.name}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Jurisdiction and cluster are automatically enforced based on regional assignment.
+                </span>
+              </div>
 
               {/* Password & Confirm */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -807,12 +666,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
               <div className="p-2.5 rounded-lg bg-slate-800/70 border border-slate-700/60 text-[11px] text-slate-300 space-y-1">
                 <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Automatic Role Provisioning Policy:</span>
+                  <span>Staff Registration & Security Policy:</span>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  • <strong>amldelgado@fda.gov.ph</strong> is assigned Superadmin status.
-                  <br />• All registrations under <strong>ODDG-FROO</strong> are granted Admin credentials.
+                  • All staff accounts are persisted directly to the MySQL database with bcrypt hashed credentials.
                   <br />• Regional staff access is strictly scoped to designated field jurisdictions.
+                  <br />• ODDG-FROO Headquarters Executive and Cluster Director accounts are provisioned by an Administrator.
                 </p>
               </div>
 

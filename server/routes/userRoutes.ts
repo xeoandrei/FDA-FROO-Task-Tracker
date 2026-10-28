@@ -55,6 +55,25 @@ router.post('/', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (
     const passwordHash = await hashPassword(password);
     const uname = username || email.split('@')[0];
 
+    // Resolve office and cluster from DB
+    let resolvedOfficeCode = office;
+    let resolvedClusterCode = cluster || null;
+
+    const [officeRows]: [any[], any] = await pool.query(
+      `SELECT office_code, cluster_code FROM offices WHERE office_code = ? OR office_name = ? LIMIT 1`,
+      [office, office]
+    );
+
+    if (officeRows.length > 0) {
+      resolvedOfficeCode = officeRows[0].office_code;
+      if (!resolvedClusterCode) {
+        resolvedClusterCode = officeRows[0].cluster_code || null;
+      }
+    } else if (office.toUpperCase() === 'NCR') {
+      resolvedOfficeCode = 'Region NCR';
+      resolvedClusterCode = 'SLC';
+    }
+
     await pool.query(
       `INSERT INTO users (id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, is_active, last_activity)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
@@ -68,8 +87,8 @@ router.post('/', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (
         lastName.trim(),
         position || 'Food-Drug Regulation Officer (FDRO)',
         role,
-        office,
-        cluster || null,
+        resolvedOfficeCode,
+        resolvedClusterCode,
         'Account created by administrator',
       ]
     );

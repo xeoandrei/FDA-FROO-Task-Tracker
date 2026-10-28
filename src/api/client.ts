@@ -76,6 +76,33 @@ export const api = {
     return res;
   },
 
+  async register(data: {
+    username: string;
+    email: string;
+    password: string;
+    firstName: string;
+    middleInitial?: string;
+    lastName: string;
+    position: string;
+    office: string;
+  }): Promise<{ message: string; user: UserAccount }> {
+    return request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async demoLogin(username: string): Promise<{ token: string; user: UserAccount }> {
+    const res = await request<{ token: string; user: UserAccount }>('/api/auth/demo-login', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    });
+    if (res.token) {
+      setAuthToken(res.token);
+    }
+    return res;
+  },
+
   async getMe(): Promise<{ user: UserAccount }> {
     return request('/api/auth/me');
   },
@@ -121,17 +148,34 @@ export const api = {
     });
   },
 
-  async completeTask(taskId: string, outcome: string, remarks?: string): Promise<Task> {
+  async completeTask(
+    taskId: string,
+    outcomeOrData: string | { outcome: string; remarks?: string },
+    remarksParam?: string
+  ): Promise<Task> {
+    const body =
+      typeof outcomeOrData === 'object'
+        ? outcomeOrData
+        : { outcome: outcomeOrData, remarks: remarksParam };
     return request(`/api/tasks/${taskId}/complete`, {
       method: 'POST',
-      body: JSON.stringify({ outcome, remarks }),
+      body: JSON.stringify(body),
     });
   },
 
-  async addTaskActivity(taskId: string, notes: string, newStatus?: string, action?: string): Promise<Task> {
+  async addTaskActivity(
+    taskId: string,
+    notesOrData: string | { action?: string; notes?: string; newStatus?: string },
+    newStatusParam?: string,
+    actionParam?: string
+  ): Promise<Task> {
+    const body =
+      typeof notesOrData === 'object'
+        ? notesOrData
+        : { notes: notesOrData, newStatus: newStatusParam, action: actionParam };
     return request(`/api/tasks/${taskId}/activity`, {
       method: 'POST',
-      body: JSON.stringify({ notes, newStatus, action }),
+      body: JSON.stringify(body),
     });
   },
 

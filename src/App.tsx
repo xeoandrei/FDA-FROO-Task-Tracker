@@ -17,6 +17,7 @@ import {
   getCurrentUser,
   setCurrentUser,
   getStoredUsers,
+  saveStoredUsers,
   logSystemAction,
 } from './utils/authStorage';
 import { FROO_CLUSTERS, getRegionsForCluster } from './data/clusters';
@@ -41,7 +42,7 @@ import {
 } from './utils/taskAuthorization';
 import { ActivityItem } from './types/task';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { api } from './api/client';
+import { api, setAuthToken } from './api/client';
 
 export default function App() {
   // Current authenticated user session
@@ -171,10 +172,28 @@ export default function App() {
   }, [defaultRegionFilter]);
 
   // Login handler
-  const handleLoginSuccess = (user: UserAccount) => {
+  const handleLoginSuccess = async (user: UserAccount) => {
     setCurrentUserState(user);
     setActiveView('MY_TASKS');
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
+
+    // If backend is online, fetch fresh task and user list with the authenticated token
+    try {
+      const [usersRes, tasksRes] = await Promise.allSettled([
+        api.getUsers(),
+        api.getTasks(),
+      ]);
+      if (usersRes.status === 'fulfilled' && usersRes.value.length > 0) {
+        setAllStaffUsers(usersRes.value);
+        saveStoredUsers(usersRes.value);
+      }
+      if (tasksRes.status === 'fulfilled' && tasksRes.value.length > 0) {
+        setTasks(tasksRes.value);
+        saveStoredTasks(tasksRes.value);
+      }
+    } catch {
+      // Keep existing tasks and users
+    }
   };
 
   // Logout handler
@@ -186,6 +205,7 @@ export default function App() {
         `User ${currentUser.firstName} ${currentUser.lastName} signed out of the system.`
       );
     }
+    setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserState(null);
     showToast('You have been safely signed out.');
