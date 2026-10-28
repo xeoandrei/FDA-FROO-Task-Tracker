@@ -1,7 +1,7 @@
 import { Task } from '../types/task';
 import { UserAccount, SystemLog } from '../types/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_KEY = 'froo_jwt_token_v1';
 
 export function getAuthToken(): string | null {

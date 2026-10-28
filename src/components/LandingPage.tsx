@@ -81,7 +81,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     } catch (apiErr: any) {
       const errorMsg = apiErr.message || 'Login failed';
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        setLoginError('Unable to connect to the FROO backend API server at http://localhost:4000. Please ensure the backend server and MySQL database are running.');
+        setLoginError('Unable to connect to the FROO backend API server. Please check your network connection.');
       } else {
         setLoginError(errorMsg);
       }
@@ -102,7 +102,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     } catch (apiErr: any) {
       const errorMsg = apiErr.message || 'Demo authentication failed';
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        setLoginError('Backend API server at http://localhost:4000 is unreachable for demo login.');
+        setLoginError('Unable to connect to the FROO backend server for demo login.');
       } else {
         setLoginError(errorMsg);
       }
@@ -176,7 +176,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     } catch (apiErr: any) {
       const errorMsg = apiErr.message || 'Registration failed';
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        setRegError('Unable to connect to the FROO backend API server at http://localhost:4000. Please ensure the Express server and MySQL container are running.');
+        setRegError('Unable to connect to the FROO backend API server. Please check your network connection.');
       } else {
         setRegError(errorMsg);
       }

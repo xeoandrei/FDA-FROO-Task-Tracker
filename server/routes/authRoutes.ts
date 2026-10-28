@@ -8,9 +8,17 @@ const router = Router();
 const ALLOWED_DEMO_USERS = new Set([
   'amldelgado',
   'atty.franklin',
+  'atty.ton',
+  'ton.froo',
   'director.gomel',
+  'director.slc',
   'sup.ncr',
+  'sup.r4a',
   'juan.fdro',
+  'maria.fdro',
+  'anthonette.fdro',
+  'carlos.lo',
+  'gemma.io',
 ]);
 
 // Helper to normalize and resolve office code and cluster code against database
