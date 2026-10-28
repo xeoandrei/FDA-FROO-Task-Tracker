@@ -67,10 +67,10 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
         teamMembers || '',
         driver || 'HANNIBAL C. ECOBEN',
         vehiclePlateNumber || 'AVANZA SAB 9141',
-        recommendedBy?.name || 'Recommended Signatory',
-        recommendedBy?.title || 'Regional Supervisor',
-        approvedBy?.name || 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV',
-        approvedBy?.title || 'Deputy Director General - Field Regulatory Operations Office',
+        recommendedBy?.name !== undefined ? recommendedBy.name : (initialStatus === 'Pending ODDG Approval' ? 'JON JOSEPH H. MEDRANO' : ''),
+        recommendedBy?.title !== undefined ? recommendedBy.title : (initialStatus === 'Pending ODDG Approval' ? 'Executive Assistant III, ODDG-FROO' : ''),
+        approvedBy?.name !== undefined ? approvedBy.name : (initialStatus === 'Pending ODDG Approval' ? 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV' : ''),
+        approvedBy?.title !== undefined ? approvedBy.title : (initialStatus === 'Pending ODDG Approval' ? 'Deputy Director General - Field Regulatory Operations Office' : ''),
         initialStatus,
         user?.id || null,
       ]
@@ -174,18 +174,10 @@ router.post('/dispatches/:id/approve', authenticateToken, async (req: Authentica
 
     const ds = rows[0];
 
-    // Determine next workflow status
-    let nextStatus: string;
-    if (ds.status === 'Pending Regional Supervisor Approval') {
-      if (userRole === 'REGIONAL_SUPERVISOR') {
-        nextStatus = 'Pending ODDG Approval';
-      } else {
-        // Superadmin or Admin can directly grant complete approval
-        nextStatus = 'Approved';
-      }
-    } else {
-      nextStatus = 'Approved';
-    }
+    // Determine next workflow status:
+    // Standard Dispatch (Pending Regional Supervisor Approval) -> Approved by RS / CD / Admin / Superadmin
+    // RS and CD Dispatch (Pending ODDG Approval) -> Approved by ODDG Admin / Superadmin
+    const nextStatus = 'Approved';
 
     // CRITICAL RULE: In approval, do NOT change the signatory name and position!
     // Keep ds.approved_by_name and ds.approved_by_title intact.
@@ -313,6 +305,18 @@ router.post('/dispatches/:id/reject', authenticateToken, async (req: Authenticat
     res.status(500).json({ error: 'Failed to reject dispatch slip' });
   } finally {
     connection.release();
+  }
+});
+
+// DELETE /api/dispatches/:id
+router.delete('/dispatches/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM dispatch_slips WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete dispatch error:', error);
+    res.status(500).json({ error: 'Failed to delete dispatch slip' });
   }
 });
 

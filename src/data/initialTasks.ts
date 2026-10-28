@@ -76,8 +76,8 @@ export const INITIAL_TASKS: Task[] = [
         driver: 'HANNIBAL C. ECOBEN',
         vehiclePlateNumber: 'AVANZA SAB 9141',
         recommendedBy: {
-          name: 'GOMEL C. GABUNA, LLB, MDM, CESE',
-          title: 'Executive Assistant Designate for FROO, Director II, NLC',
+          name: 'JON JOSEPH H. MEDRANO',
+          title: 'Executive Assistant III, ODDG-FROO',
         },
         approvedBy: {
           name: 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV',

@@ -581,6 +581,71 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
   }
 });
 
+// PATCH /api/tasks/:id - Update operational details
+router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+    const { scheduledDate, location, outcome, remarks, region } = req.body;
+
+    await connection.beginTransaction();
+
+    const [rows]: [any[], any] = await connection.query('SELECT * FROM tasks WHERE id = ? FOR UPDATE', [id]);
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const task = rows[0];
+
+    await connection.query(
+      `UPDATE tasks
+       SET scheduled_date = ?,
+           location = ?,
+           outcome = ?,
+           remarks = ?,
+           region = ?
+       WHERE id = ?`,
+      [
+        scheduledDate !== undefined ? scheduledDate || null : task.scheduled_date,
+        location !== undefined ? location : task.location,
+        outcome !== undefined ? outcome : task.outcome,
+        remarks !== undefined ? remarks : task.remarks,
+        region !== undefined ? region : task.region,
+        id,
+      ]
+    );
+
+    const actorName = user ? `${user.firstName} ${user.lastName}` : 'Authorized Officer';
+    const actorOffice = user?.office || task.region;
+
+    await connection.query(
+      `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
+       VALUES (?, 'Operational details updated.', ?, ?, ?, ?, ?)`,
+      [
+        id,
+        actorName,
+        actorOffice,
+        user?.id || null,
+        `Updated outcome to "${outcome || task.outcome}" & location to "${location || task.location}"`,
+        task.status,
+      ]
+    );
+
+    await connection.commit();
+
+    const updatedTask = await fetchTaskById(id);
+    res.json(updatedTask);
+  } catch (error) {
+    await connection.rollback();
+    console.error('Update task error:', error);
+    res.status(500).json({ error: 'Failed to update task details' });
+  } finally {
+    connection.release();
+  }
+});
+
 // DELETE /api/tasks/:id
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {

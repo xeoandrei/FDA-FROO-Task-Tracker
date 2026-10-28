@@ -32,6 +32,7 @@ interface HeaderProps {
   scopeLabel?: string;
   allStaffUsers?: UserAccount[];
   onSwitchUser?: (targetUser: UserAccount) => void;
+  onOpenChangePassword?: () => void;
   dbStatus?: 'connecting' | 'online' | 'offline';
 }
 
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   scopeLabel,
   allStaffUsers = [],
   onSwitchUser,
+  onOpenChangePassword,
   dbStatus = 'offline',
 }) => {
   const isAdminOrSuper = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
@@ -120,13 +122,25 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
 
                 <span className="font-semibold text-white">
-                  {currentUser.firstName} {currentUser.lastName}
+                  {currentUser.firstName} {currentUser.middleInitial ? `${currentUser.middleInitial} ` : ''}{currentUser.lastName}
                 </span>
 
                 <span className="text-[11px] text-emerald-300 hidden sm:inline">
                   • {currentUser.position} ({currentUser.office})
                 </span>
               </div>
+
+              {/* Change Password Button */}
+              {onOpenChangePassword && (
+                <button
+                  onClick={onOpenChangePassword}
+                  className="flex items-center gap-1 text-emerald-200 hover:text-white px-2.5 py-1 text-xs bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/60 rounded-lg transition cursor-pointer"
+                  title="Change your account password"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Change Password</span>
+                </button>
+              )}
 
               {/* Sign Out Button */}
               <button

@@ -33,6 +33,7 @@ import { TaskDetailsDrawer } from './components/TaskDetailsDrawer';
 import { RegionalOverviewModal } from './components/RegionalOverviewModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import { SystemLogsModal } from './components/SystemLogsModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
 import { ReceiveTaskModal } from './components/ReceiveTaskModal';
 import {
@@ -60,6 +61,7 @@ export default function App() {
   const [isRegionalOverviewOpen, setIsRegionalOverviewOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isSystemLogsOpen, setIsSystemLogsOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Task views state (Defaults to 'MY_TASKS' per user specification)
@@ -575,6 +577,7 @@ export default function App() {
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
         onOpenSystemLogs={() => setIsSystemLogsOpen(true)}
         onOpenRegionalOverview={() => setIsRegionalOverviewOpen(true)}
+        onOpenChangePassword={() => setIsChangePasswordOpen(true)}
         onExportCsv={() => exportTasksToCsv(filteredTasks)}
         selectedRegionFilter={selectedRegion}
         onSelectRegionFilter={setSelectedRegion}
@@ -699,6 +702,14 @@ export default function App() {
         isOpen={isSystemLogsOpen}
         onClose={() => setIsSystemLogsOpen(false)}
         currentUser={currentUser}
+      />
+
+      {/* Change Account Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        currentUser={currentUser}
+        onSuccessToast={showToast}
       />
     </div>
   );

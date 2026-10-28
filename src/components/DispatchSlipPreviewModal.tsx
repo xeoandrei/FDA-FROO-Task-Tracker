@@ -59,8 +59,8 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
         },
         othersPurpose: '',
         timeOfArrival: '',
-        recommendedBy: { name: 'GOMEL C. GABUNA', title: 'Director II, Regional Field Office' },
-        approvedBy: { name: 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV', title: 'Deputy Director General, FROO' },
+        recommendedBy: { name: '', title: '' },
+        approvedBy: { name: '', title: '' },
       };
     }
 
@@ -98,13 +98,19 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
       },
       othersPurpose: slip.othersPurpose || (task?.category === 'Others' ? task.originDetails || '' : ''),
       timeOfArrival: slip.timeOfArrival || '________________________',
-      recommendedBy: slip.recommendedBy || {
-        name: 'GOMEL C. GABUNA',
-        title: 'Director II, Regional Field Office',
+      recommendedBy: {
+        name:
+          slip.recommendedBy?.name === 'GOMEL C. GABUNA, LLB, MDM, CESE'
+            ? 'JON JOSEPH H. MEDRANO'
+            : (slip.recommendedBy?.name ?? ''),
+        title:
+          slip.recommendedBy?.title === 'Executive Assistant Designate for FROO, Director II, NLC'
+            ? 'Executive Assistant III, ODDG-FROO'
+            : (slip.recommendedBy?.title ?? ''),
       },
-      approvedBy: slip.approvedBy || {
-        name: 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV',
-        title: 'Deputy Director General, FROO',
+      approvedBy: {
+        name: slip.approvedBy?.name ?? '',
+        title: slip.approvedBy?.title ?? '',
       },
     };
   }, [slip, task]);

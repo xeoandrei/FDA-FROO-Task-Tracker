@@ -89,27 +89,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Handle Quick Demo Login through backend authentication
-  const handleQuickLogin = async (username: string) => {
-    setLoginError(null);
-    try {
-      const res = await api.demoLogin(username);
-      if (res && res.user) {
-        setCurrentUser(res.user);
-        onLoginSuccess(res.user);
-        return;
-      }
-    } catch (apiErr: any) {
-      const errorMsg = apiErr.message || 'Demo authentication failed';
-      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        setLoginError('Unable to connect to the FROO backend server for demo login.');
-      } else {
-        setLoginError(errorMsg);
-      }
-      setActiveModal('login');
-    }
-  };
-
   // Handle Staff Registration
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,85 +246,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
               className="px-6 py-3.5 text-sm font-semibold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition-all cursor-pointer"
             >
               Create Staff Account (@fda.gov.ph)
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Demo Sign In Box */}
-        <div className="mt-14 max-w-4xl mx-auto w-full bg-slate-800/70 border border-slate-700/80 rounded-2xl p-5 backdrop-blur-sm shadow-xl">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-4 pb-3 border-b border-slate-700/60">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                Instant Demo Access (Test Specific Roles & Jurisdictions)
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-400">Click any card to sign in immediately</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Superadmin */}
-            <button
-              onClick={() => handleQuickLogin('amldelgado')}
-              className="text-left p-3.5 rounded-xl bg-slate-900/80 hover:bg-emerald-950/50 border border-slate-700 hover:border-emerald-500/50 transition-all group cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/60">
-                  SUPERADMIN
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-emerald-300">AML Delgado</div>
-              <div className="text-[11px] text-slate-400 truncate">amldelgado@fda.gov.ph</div>
-              <div className="text-[10px] text-emerald-400 mt-2 font-medium">IT Developer • System Console</div>
-            </button>
-
-            {/* ODDG-FROO Admin */}
-            <button
-              onClick={() => handleQuickLogin('atty.franklin')}
-              className="text-left p-3.5 rounded-xl bg-slate-900/80 hover:bg-emerald-950/50 border border-slate-700 hover:border-emerald-500/50 transition-all group cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60">
-                  ODDG-FROO (ADMIN)
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-emerald-300">Atty. Franklin Tabaquin</div>
-              <div className="text-[11px] text-slate-400 truncate">Deputy Director General</div>
-              <div className="text-[10px] text-blue-400 mt-2 font-medium">National Scope & Approver</div>
-            </button>
-
-            {/* Cluster Director */}
-            <button
-              onClick={() => handleQuickLogin('director.gomel')}
-              className="text-left p-3.5 rounded-xl bg-slate-900/80 hover:bg-emerald-950/50 border border-slate-700 hover:border-emerald-500/50 transition-all group cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
-                  CLUSTER DIRECTOR
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-emerald-300">Gomel C. Gabuna</div>
-              <div className="text-[11px] text-slate-400 truncate">North Luzon (Reg 1, 2, 3, CAR)</div>
-              <div className="text-[10px] text-emerald-400 mt-2 font-medium">NLC Cluster Jurisdiction</div>
-            </button>
-
-            {/* FDRO Inspector */}
-            <button
-              onClick={() => handleQuickLogin('juan.fdro')}
-              className="text-left p-3.5 rounded-xl bg-slate-900/80 hover:bg-emerald-950/50 border border-slate-700 hover:border-emerald-500/50 transition-all group cursor-pointer"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60">
-                  FDRO (STANDARD)
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-              <div className="text-xs font-bold text-white group-hover:text-emerald-300">Juan Dela Cruz</div>
-              <div className="text-[11px] text-slate-400 truncate">FDRO • Region NCR</div>
-              <div className="text-[10px] text-amber-400 mt-2 font-medium">Task Receive & Execute</div>
             </button>
           </div>
         </div>

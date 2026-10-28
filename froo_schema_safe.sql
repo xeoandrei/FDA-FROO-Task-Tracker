@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `office_code` VARCHAR(50) NOT NULL,
   `cluster_code` VARCHAR(20) NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `account_status` VARCHAR(20) NOT NULL DEFAULT 'active',
   `last_login_at` DATETIME NULL,
   `last_activity` VARCHAR(255) NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

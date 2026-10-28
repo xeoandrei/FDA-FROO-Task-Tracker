@@ -14,9 +14,22 @@ export function getStoredTasks(): Task[] {
       return parsed.map((t) => {
         const init = INITIAL_TASKS.find((it) => it.id === t.id);
         const dtn = t.dtn || init?.dtn;
-        const slips = (!t.dispatchSlips || t.dispatchSlips.length === 0) && init?.dispatchSlips
+        const rawSlips = (!t.dispatchSlips || t.dispatchSlips.length === 0) && init?.dispatchSlips
           ? init.dispatchSlips
           : (t.dispatchSlips || []);
+        const slips = rawSlips.map((s: any) => ({
+          ...s,
+          recommendedBy: s.recommendedBy
+            ? {
+                name: s.recommendedBy.name?.includes('GOMEL C. GABUNA')
+                  ? 'JON JOSEPH H. MEDRANO'
+                  : s.recommendedBy.name,
+                title: s.recommendedBy.title?.includes('Executive Assistant Designate for FROO')
+                  ? 'Executive Assistant III, ODDG-FROO'
+                  : s.recommendedBy.title,
+              }
+            : s.recommendedBy,
+        }));
         return { ...t, dtn, dispatchSlips: slips };
       });
     }

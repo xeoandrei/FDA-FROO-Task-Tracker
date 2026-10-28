@@ -250,7 +250,20 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     setActivityStatusChange('no-change');
   };
 
-  const handleSaveOperationalDetails = () => {
+  const handleSaveOperationalDetails = async () => {
+    try {
+      await api.updateTask(task.id, {
+        scheduledDate: editScheduledDate,
+        location: editLocation,
+        outcome: editOutcome,
+        remarks: editRemarks,
+        assignedTo: editAssignedTo,
+        region: editRegion,
+      });
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
+
     const updated: Task = {
       ...task,
       dtn: editDtn.trim() || undefined,
@@ -368,8 +381,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
 
     // Preserve existing designated approvedBy name and position regardless of who approves
-    const designatedName = slip.approvedBy?.name || 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
-    const designatedTitle = slip.approvedBy?.title || 'Deputy Director General - Field Regulatory Operations Office';
+    const designatedName = slip.approvedBy?.name ?? '';
+    const designatedTitle = slip.approvedBy?.title ?? '';
 
     const actorDisplayName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Authorized Official';
     const actorPosition = currentUser ? currentUser.position : 'Officer';
@@ -459,8 +472,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
   };
 
-  const handleDeleteDispatch = (dispatchId: string) => {
+  const handleDeleteDispatch = async (dispatchId: string) => {
     if (!confirm('Are you sure you want to delete this dispatch slip?')) return;
+    try {
+      await api.deleteDispatch(dispatchId);
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
     const filtered = (task.dispatchSlips || []).filter((s) => s.id !== dispatchId);
     const updatedTask: Task = {
       ...task,

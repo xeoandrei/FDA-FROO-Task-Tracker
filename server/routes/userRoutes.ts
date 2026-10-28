@@ -14,22 +14,25 @@ router.get('/', authenticateToken, async (_req, res) => {
        ORDER BY last_name ASC, first_name ASC`
     );
 
-    const users = rows.map((r) => ({
-      id: r.id,
-      username: r.username || r.email.split('@')[0],
-      email: r.email,
-      firstName: r.first_name,
-      middleInitial: r.middle_initial || '',
-      lastName: r.last_name,
-      position: r.position,
-      office: r.office_code,
-      cluster: r.cluster_code,
-      role: r.role_code,
-      status: r.is_active ? 'active' : (r.last_activity && r.last_activity.toLowerCase().includes('awaiting') ? 'pending' : 'deactivated'),
-      createdAt: r.created_at,
-      lastLogin: r.last_login_at,
-      lastActivity: r.last_activity,
-    }));
+    const users = rows.map((r) => {
+      const isSuper = r.id === 'usr-superadmin' || (r.email && r.email.toLowerCase() === 'amldelgado@fda.gov.ph');
+      return {
+        id: r.id,
+        username: r.username || r.email.split('@')[0],
+        email: r.email,
+        firstName: isSuper ? 'Andrei Manuel' : r.first_name,
+        middleInitial: isSuper ? 'L.' : (r.middle_initial || ''),
+        lastName: isSuper ? 'Delgado' : r.last_name,
+        position: isSuper ? 'IT Developer' : r.position,
+        office: r.office_code,
+        cluster: r.cluster_code,
+        role: r.role_code,
+        status: r.is_active ? 'active' : (r.last_activity && r.last_activity.toLowerCase().includes('awaiting') ? 'pending' : 'deactivated'),
+        createdAt: r.created_at,
+        lastLogin: r.last_login_at,
+        lastActivity: r.last_activity,
+      };
+    });
 
     res.json(users);
   } catch (error) {

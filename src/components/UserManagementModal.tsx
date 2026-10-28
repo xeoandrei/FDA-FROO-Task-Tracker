@@ -52,8 +52,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       api.getUsers()
         .then((fetched) => {
           if (fetched && Array.isArray(fetched) && fetched.length > 0) {
-            setUsers(fetched);
             saveStoredUsers(fetched);
+            setUsers(getStoredUsers());
           }
         })
         .catch(() => {

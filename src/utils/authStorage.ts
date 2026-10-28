@@ -43,11 +43,14 @@ export function getStoredUsers(): UserAccount[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Normalize any older RANK_AND_FILE to STANDARD and ensure superadmin has IT Developer position
+      // Normalize any older RANK_AND_FILE to STANDARD and ensure superadmin has Andrei Manuel L. Delgado & IT Developer position
       const normalized = parsed.map((u: UserAccount) => {
-        const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL;
+        const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
         return {
           ...u,
+          firstName: isSuper ? 'Andrei Manuel' : u.firstName,
+          middleInitial: isSuper ? 'L.' : u.middleInitial,
+          lastName: isSuper ? 'Delgado' : u.lastName,
           role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
           position: isSuper ? 'IT Developer' : u.position,
         };
@@ -71,7 +74,19 @@ export function getStoredUsers(): UserAccount[] {
 
 export function saveStoredUsers(users: UserAccount[]): void {
   try {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    const normalized = users.map((u) => {
+      const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
+      return isSuper
+        ? {
+            ...u,
+            firstName: 'Andrei Manuel',
+            middleInitial: 'L.',
+            lastName: 'Delgado',
+            position: 'IT Developer' as UserPosition,
+          }
+        : u;
+    });
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(normalized));
   } catch (e) {
     console.error('Failed to save users', e);
   }
@@ -85,7 +100,10 @@ export function getCurrentUser(): UserAccount | null {
     if ((user.role as string) === 'RANK_AND_FILE') {
       user.role = 'STANDARD';
     }
-    if (user.email.toLowerCase() === SUPERADMIN_EMAIL) {
+    if (user.email.toLowerCase() === SUPERADMIN_EMAIL || user.id === 'usr-superadmin') {
+      user.firstName = 'Andrei Manuel';
+      user.middleInitial = 'L.';
+      user.lastName = 'Delgado';
       user.position = 'IT Developer';
     }
     // Double check if account was deactivated or updated in registry

@@ -92,15 +92,11 @@ export const api = {
     });
   },
 
-  async demoLogin(username: string): Promise<{ token: string; user: UserAccount }> {
-    const res = await request<{ token: string; user: UserAccount }>('/api/auth/demo-login', {
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    return request('/api/auth/change-password', {
       method: 'POST',
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
-    if (res.token) {
-      setAuthToken(res.token);
-    }
-    return res;
   },
 
   async getMe(): Promise<{ user: UserAccount }> {
@@ -151,6 +147,13 @@ export const api = {
     return request('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(taskData),
+    });
+  },
+
+  async updateTask(taskId: string, updates: any): Promise<Task> {
+    return request(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
     });
   },
 
@@ -215,6 +218,12 @@ export const api = {
     return request(`/api/dispatches/${dispatchId}/reject`, {
       method: 'POST',
       body: JSON.stringify({ rejectionReason }),
+    });
+  },
+
+  async deleteDispatch(dispatchId: string): Promise<{ success: boolean }> {
+    return request(`/api/dispatches/${dispatchId}`, {
+      method: 'DELETE',
     });
   },
 

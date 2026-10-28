@@ -83,40 +83,6 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   const [driver, setDriver] = useState(existingSlip?.driver || 'HANNIBAL C. ECOBEN');
   const [vehiclePlateNumber, setVehiclePlateNumber] = useState(existingSlip?.vehiclePlateNumber || 'AVANZA SAB 9141');
 
-  // Officials recommendation & approval defaults based on roles
-  const isStandardStaff = Boolean(
-    currentUser && (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE')
-  );
-
-  const defaultRecommendedName = isStandardStaff && currentUser
-    ? `${currentUser.firstName.toUpperCase()} ${currentUser.middleInitial ? currentUser.middleInitial.toUpperCase() + ' ' : ''}${currentUser.lastName.toUpperCase()}`
-    : 'GOMEL C. GABUNA, LLB, MDM, CESE';
-
-  const defaultRecommendedTitle = isStandardStaff && currentUser
-    ? `${currentUser.position}, ${currentUser.office}`
-    : 'Executive Assistant Designate for FROO, Director II, NLC';
-
-  const defaultApprovedName = isStandardStaff
-    ? 'REGIONAL SUPERVISOR'
-    : 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV';
-
-  const defaultApprovedTitle = isStandardStaff
-    ? `Regional Regulatory Enforcement Supervisor - ${task.region}`
-    : 'Deputy Director General - Field Regulatory Operations Office';
-
-  const [recommendedByName, setRecommendedByName] = useState(
-    existingSlip?.recommendedBy.name || defaultRecommendedName
-  );
-  const [recommendedByTitle, setRecommendedByTitle] = useState(
-    existingSlip?.recommendedBy.title || defaultRecommendedTitle
-  );
-  const [approvedByName, setApprovedByName] = useState(
-    existingSlip?.approvedBy.name || defaultApprovedName
-  );
-  const [approvedByTitle, setApprovedByTitle] = useState(
-    existingSlip?.approvedBy.title || defaultApprovedTitle
-  );
-
   // Status computation based on user role and hierarchy
   const determineInitialStatus = (): DispatchStatus => {
     if (
@@ -137,7 +103,49 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     return 'Pending Regional Supervisor Approval';
   };
 
-  const [status, setStatus] = useState<DispatchStatus>(determineInitialStatus);
+  const getSignatoryDefaultsForStatus = (targetStatus: DispatchStatus) => {
+    if (targetStatus === 'Pending ODDG Approval') {
+      return {
+        recommendedByName: 'JON JOSEPH H. MEDRANO',
+        recommendedByTitle: 'Executive Assistant III, ODDG-FROO',
+        approvedByName: 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV',
+        approvedByTitle: 'Deputy Director General - Field Regulatory Operations Office',
+      };
+    }
+    // Standard Dispatch (Pending RS / CD Approval): all signatory fields blank
+    return {
+      recommendedByName: '',
+      recommendedByTitle: '',
+      approvedByName: '',
+      approvedByTitle: '',
+    };
+  };
+
+  const initialStatus = determineInitialStatus();
+  const initialSignatories = getSignatoryDefaultsForStatus(initialStatus);
+
+  const [status, setStatus] = useState<DispatchStatus>(initialStatus);
+  const [recommendedByName, setRecommendedByName] = useState(
+    existingSlip ? existingSlip.recommendedBy.name : initialSignatories.recommendedByName
+  );
+  const [recommendedByTitle, setRecommendedByTitle] = useState(
+    existingSlip ? existingSlip.recommendedBy.title : initialSignatories.recommendedByTitle
+  );
+  const [approvedByName, setApprovedByName] = useState(
+    existingSlip ? existingSlip.approvedBy.name : initialSignatories.approvedByName
+  );
+  const [approvedByTitle, setApprovedByTitle] = useState(
+    existingSlip ? existingSlip.approvedBy.title : initialSignatories.approvedByTitle
+  );
+
+  const handleStatusChange = (nextStatus: DispatchStatus) => {
+    setStatus(nextStatus);
+    const defaults = getSignatoryDefaultsForStatus(nextStatus);
+    setRecommendedByName(defaults.recommendedByName);
+    setRecommendedByTitle(defaults.recommendedByTitle);
+    setApprovedByName(defaults.approvedByName);
+    setApprovedByTitle(defaults.approvedByTitle);
+  };
 
   // Re-generate auto sequence when opening or when dispatch date year changes
   const handleRegenerateCtrlNo = () => {
@@ -146,7 +154,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     setCtrlMeta(fresh);
   };
 
-  // Sync state if existingSlip changes
+  // Sync state if existingSlip or modal open state changes
   useEffect(() => {
     if (existingSlip) {
       setCtrlNo(existingSlip.ctrlNo);
@@ -160,17 +168,25 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       setTeamMembers(existingSlip.teamMembers || 'NONE');
       setDriver(existingSlip.driver || '');
       setVehiclePlateNumber(existingSlip.vehiclePlateNumber || '');
+      const resolvedStatus =
+        existingSlip.status === 'Pending ODDG Approval'
+          ? 'Pending ODDG Approval'
+          : 'Pending Regional Supervisor Approval';
+      setStatus(resolvedStatus);
       setRecommendedByName(existingSlip.recommendedBy.name);
       setRecommendedByTitle(existingSlip.recommendedBy.title);
       setApprovedByName(existingSlip.approvedBy.name);
       setApprovedByTitle(existingSlip.approvedBy.title);
-      setStatus(
-        existingSlip.status === 'Pending ODDG Approval'
-          ? 'Pending ODDG Approval'
-          : 'Pending Regional Supervisor Approval'
-      );
+    } else if (isOpen) {
+      const defStatus = determineInitialStatus();
+      const defSignatories = getSignatoryDefaultsForStatus(defStatus);
+      setStatus(defStatus);
+      setRecommendedByName(defSignatories.recommendedByName);
+      setRecommendedByTitle(defSignatories.recommendedByTitle);
+      setApprovedByName(defSignatories.approvedByName);
+      setApprovedByTitle(defSignatories.approvedByTitle);
     }
-  }, [existingSlip]);
+  }, [existingSlip, isOpen]);
 
   if (!isOpen) return null;
 
@@ -517,7 +533,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                 </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as DispatchStatus)}
+                  onChange={(e) => handleStatusChange(e.target.value as DispatchStatus)}
                   className="w-full text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839] font-medium"
                 >
                   <option value="Pending Regional Supervisor Approval">
@@ -536,13 +552,15 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                     type="text"
                     value={recommendedByName}
                     onChange={(e) => setRecommendedByName(e.target.value)}
-                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5"
+                    placeholder={status === 'Pending Regional Supervisor Approval' ? 'Leave blank or enter signatory name' : 'JON JOSEPH H. MEDRANO'}
+                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5 bg-white"
                   />
                   <input
                     type="text"
                     value={recommendedByTitle}
                     onChange={(e) => setRecommendedByTitle(e.target.value)}
-                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1"
+                    placeholder={status === 'Pending Regional Supervisor Approval' ? 'Leave blank or enter position/title' : 'Executive Assistant III, ODDG-FROO'}
+                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1 bg-white"
                   />
                 </div>
 
@@ -552,13 +570,15 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                     type="text"
                     value={approvedByName}
                     onChange={(e) => setApprovedByName(e.target.value)}
-                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5"
+                    placeholder={status === 'Pending Regional Supervisor Approval' ? 'Leave blank or enter approver name' : 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV'}
+                    className="w-full text-[11px] border border-slate-300 rounded px-2 py-1 mt-0.5 bg-white"
                   />
                   <input
                     type="text"
                     value={approvedByTitle}
                     onChange={(e) => setApprovedByTitle(e.target.value)}
-                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1"
+                    placeholder={status === 'Pending Regional Supervisor Approval' ? 'Leave blank or enter position/title' : 'Deputy Director General - Field Regulatory Operations Office'}
+                    className="w-full text-[10px] text-slate-500 border border-slate-200 rounded px-2 py-1 mt-1 bg-white"
                   />
                 </div>
               </div>

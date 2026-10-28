@@ -357,14 +357,20 @@ router.post('/login', async (req, res) => {
       userRow.id,
     ]);
 
+    const isSuper = userRow.id === 'usr-superadmin' || (userRow.email && userRow.email.toLowerCase() === 'amldelgado@fda.gov.ph');
+    const resolvedFirstName = isSuper ? 'Andrei Manuel' : userRow.first_name;
+    const resolvedMiddleInitial = isSuper ? 'L.' : (userRow.middle_initial || '');
+    const resolvedLastName = isSuper ? 'Delgado' : userRow.last_name;
+    const resolvedPosition = isSuper ? 'IT Developer' : userRow.position;
+
     // Build payload and token
     const tokenPayload = {
       id: userRow.id,
       email: userRow.email,
       role: userRow.role_code,
       office: userRow.office_code,
-      firstName: userRow.first_name,
-      lastName: userRow.last_name,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
     };
 
     const token = generateToken(tokenPayload);
@@ -374,10 +380,10 @@ router.post('/login', async (req, res) => {
       id: userRow.id,
       username: userRow.username || userRow.email.split('@')[0],
       email: userRow.email,
-      firstName: userRow.first_name,
-      middleInitial: userRow.middle_initial || '',
-      lastName: userRow.last_name,
-      position: userRow.position,
+      firstName: resolvedFirstName,
+      middleInitial: resolvedMiddleInitial,
+      lastName: resolvedLastName,
+      position: resolvedPosition,
       office: userRow.office_code,
       cluster: userRow.cluster_code,
       role: userRow.role_code,
@@ -411,6 +417,72 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/change-password - Change logged-in user's account password
+router.post('/change-password', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Both current password and new password are required.' });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    const [rows]: [any[], any] = await pool.query(
+      'SELECT id, email, password_hash, first_name, last_name, role_code FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    const userRow = rows[0];
+    const isMatch = await comparePassword(currentPassword, userRow.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+    await pool.query(
+      'UPDATE users SET password_hash = ?, last_activity = ? WHERE id = ?',
+      [newPasswordHash, 'Updated account password', userId]
+    );
+
+    try {
+      await pool.query(
+        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          'USER_UPDATED',
+          userRow.id,
+          userRow.email,
+          userRow.role_code,
+          `User ${userRow.first_name} ${userRow.last_name} changed their account password.`,
+          userRow.id,
+          `${userRow.first_name} ${userRow.last_name}`,
+        ]
+      );
+    } catch (auditErr) {
+      console.warn('Audit log write warning:', auditErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'Your account password has been updated successfully.',
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to update password.' });
+  }
+});
+
 // GET /api/auth/me
 router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
@@ -431,14 +503,15 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
     }
 
     const row = rows[0];
+    const isSuper = row.id === 'usr-superadmin' || (row.email && row.email.toLowerCase() === 'amldelgado@fda.gov.ph');
     const user = {
       id: row.id,
       username: row.username || row.email.split('@')[0],
       email: row.email,
-      firstName: row.first_name,
-      middleInitial: row.middle_initial || '',
-      lastName: row.last_name,
-      position: row.position,
+      firstName: isSuper ? 'Andrei Manuel' : row.first_name,
+      middleInitial: isSuper ? 'L.' : (row.middle_initial || ''),
+      lastName: isSuper ? 'Delgado' : row.last_name,
+      position: isSuper ? 'IT Developer' : row.position,
       office: row.office_code,
       cluster: row.cluster_code,
       role: row.role_code,

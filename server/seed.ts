@@ -86,8 +86,8 @@ export async function runAutoSeed(): Promise<void> {
           id: 'usr-superadmin',
           username: 'amldelgado',
           email: 'amldelgado@fda.gov.ph',
-          first_name: 'AML',
-          middle_initial: 'M.',
+          first_name: 'Andrei Manuel',
+          middle_initial: 'L.',
           last_name: 'Delgado',
           position: 'IT Developer',
           role_code: 'SUPERADMIN',
@@ -262,6 +262,16 @@ export async function runAutoSeed(): Promise<void> {
       }
       console.log('✅ Initial FDA staff users seeded.');
     }
+
+    // Ensure Superadmin record always reflects Andrei Manuel L. Delgado & IT Developer in MySQL
+    await connection.query(
+      `UPDATE users
+       SET first_name = 'Andrei Manuel',
+           middle_initial = 'L.',
+           last_name = 'Delgado',
+           position = 'IT Developer'
+       WHERE id = 'usr-superadmin' OR LOWER(email) = 'amldelgado@fda.gov.ph'`
+    );
 
     // 5. Seed initial tasks if tasks table is empty
     const [taskRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM tasks');

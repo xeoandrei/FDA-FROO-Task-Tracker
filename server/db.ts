@@ -71,8 +71,8 @@ export const fallbackStore = {
       username: 'amldelgado',
       email: 'amldelgado@fda.gov.ph',
       password_hash: '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', // password123
-      first_name: 'AML',
-      middle_initial: 'M.',
+      first_name: 'Andrei Manuel',
+      middle_initial: 'L.',
       last_name: 'Delgado',
       position: 'IT Developer',
       role_code: 'SUPERADMIN',
@@ -530,6 +530,32 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
       if (params.length >= 2) user.last_activity = params[0];
     }
     return [{ affectedRows: user ? 1 : 0 }, []] as any;
+  }
+
+  // 9d. USERS: Update password_hash
+  if (normalizedSql.startsWith('UPDATE users SET password_hash = ?')) {
+    const newHash = params[0];
+    const userId = params[params.length - 1];
+    const user = fallbackStore.users.find((u) => u.id === userId);
+    if (user) {
+      user.password_hash = newHash;
+      user.last_activity = 'Changed account password';
+    }
+    return [{ affectedRows: user ? 1 : 0 }, []] as any;
+  }
+
+  // 9e. USERS: Superadmin profile normalization
+  if (normalizedSql.includes("SET first_name = 'Andrei Manuel'")) {
+    const superUser = fallbackStore.users.find(
+      (u) => u.id === 'usr-superadmin' || u.email.toLowerCase() === 'amldelgado@fda.gov.ph'
+    );
+    if (superUser) {
+      superUser.first_name = 'Andrei Manuel';
+      superUser.middle_initial = 'L.';
+      superUser.last_name = 'Delgado';
+      superUser.position = 'IT Developer';
+    }
+    return [{ affectedRows: superUser ? 1 : 0 }, []] as any;
   }
 
   // 10. USERS: Insert new user (Registration or Admin creation)
