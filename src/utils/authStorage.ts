@@ -43,11 +43,15 @@ export function getStoredUsers(): UserAccount[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Normalize any older RANK_AND_FILE to STANDARD
-      const normalized = parsed.map((u: UserAccount) => ({
-        ...u,
-        role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
-      }));
+      // Normalize any older RANK_AND_FILE to STANDARD and ensure superadmin has IT Developer position
+      const normalized = parsed.map((u: UserAccount) => {
+        const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL;
+        return {
+          ...u,
+          role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
+          position: isSuper ? 'IT Developer' : u.position,
+        };
+      });
       // Ensure superadmin always exists
       const hasSuper = normalized.some((u: UserAccount) => u.email.toLowerCase() === SUPERADMIN_EMAIL);
       if (!hasSuper) {
@@ -81,7 +85,10 @@ export function getCurrentUser(): UserAccount | null {
     if ((user.role as string) === 'RANK_AND_FILE') {
       user.role = 'STANDARD';
     }
-    // Double check if account was deactivated in registry
+    if (user.email.toLowerCase() === SUPERADMIN_EMAIL) {
+      user.position = 'IT Developer';
+    }
+    // Double check if account was deactivated or updated in registry
     const allUsers = getStoredUsers();
     const fresh = allUsers.find((u) => u.id === user.id);
     if (fresh) {

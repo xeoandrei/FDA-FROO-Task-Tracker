@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Users,
@@ -46,6 +46,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
 
+  // Sync users with backend API on mount
+  useEffect(() => {
+    if (isOpen) {
+      api.getUsers()
+        .then((fetched) => {
+          if (fetched && Array.isArray(fetched) && fetched.length > 0) {
+            setUsers(fetched);
+            saveStoredUsers(fetched);
+          }
+        })
+        .catch(() => {
+          // Keep current stored users on offline fallback
+        });
+    }
+  }, [isOpen]);
+
   // New user form state
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -65,6 +81,31 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const list = getStoredUsers();
     setUsers(list);
     onUserListChanged();
+  };
+
+  const handleApproveUser = async (target: UserAccount) => {
+    try {
+      await api.approveUser(target.id);
+    } catch (err: any) {
+      console.warn('Backend approve notice:', err.message);
+    }
+
+    const updated: UserAccount[] = users.map((u) =>
+      u.id === target.id
+        ? { ...u, status: 'active' as AccountStatus, lastActivity: 'Approved by Administrator' }
+        : u
+    );
+
+    saveStoredUsers(updated);
+    setUsers(updated);
+    onUserListChanged();
+
+    logSystemAction(
+      'USER_APPROVED',
+      currentUser,
+      `Approved and activated staff account of ${target.firstName} ${target.lastName} (${target.position}, ${target.office}).`,
+      { targetEntityId: target.id, targetEntityName: target.email }
+    );
   };
 
   const handleToggleStatus = async (target: UserAccount) => {
@@ -97,18 +138,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     );
   };
 
-  const handleDeleteUser = (target: UserAccount) => {
+  const handleDeleteUser = async (target: UserAccount) => {
     if (target.email.toLowerCase() === SUPERADMIN_EMAIL) {
       alert('The primary Superadmin account cannot be deleted.');
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete account ${target.firstName} ${target.lastName} (${target.email})?`
-      )
-    ) {
+    const isPending = target.status === 'pending';
+    const confirmMessage = isPending
+      ? `Are you sure you want to decline/reject registration for ${target.firstName} ${target.lastName} (${target.email})?`
+      : `Are you sure you want to permanently delete account ${target.firstName} ${target.lastName} (${target.email})?`;
+
+    if (!confirm(confirmMessage)) {
       return;
+    }
+
+    try {
+      await api.deleteUser(target.id);
+    } catch (err: any) {
+      console.warn('Backend user deletion notice:', err.message);
     }
 
     const updated = users.filter((u) => u.id !== target.id);
@@ -231,6 +279,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }, 1200);
   };
 
+  const pendingCount = users.filter((u) => u.status === 'pending').length;
+
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -262,6 +312,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-[#056839] border border-emerald-200">
                   {currentUser.role === 'RANK_AND_FILE' ? 'STANDARD' : currentUser.role} Control
                 </span>
+                {pendingCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                    <Clock className="w-3 h-3 text-amber-600" />
+                    <span>{pendingCount} Pending Approval</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500">
                 Manage staff accounts, assign regional office jurisdictions, and enforce role access
@@ -289,6 +345,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Pending Review Alert Banner */}
+        {pendingCount > 0 && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-amber-500" />
+              <span className="font-bold">{pendingCount} Staff Registration{pendingCount > 1 ? 's' : ''} Awaiting Approval:</span>
+              <span className="text-amber-800">New accounts require Superadmin or ODDG-FROO Admin approval before staff can access the portal.</span>
+            </div>
+            {statusFilter !== 'pending' && (
+              <button
+                onClick={() => setStatusFilter('pending')}
+                className="px-2.5 py-1 text-[11px] font-bold text-amber-900 bg-amber-200 hover:bg-amber-300 rounded transition-colors cursor-pointer"
+              >
+                Filter Pending ({pendingCount})
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Filters and Controls */}
         <div className="p-4 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3">
@@ -327,6 +402,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
             >
               <option value="All">All Statuses</option>
+              <option value="pending">Pending Approval {pendingCount > 0 ? `(${pendingCount})` : ''}</option>
               <option value="active">Active</option>
               <option value="deactivated">Deactivated</option>
             </select>
@@ -396,26 +472,33 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </td>
 
                     <td className="py-3 px-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          user.status === 'active'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-red-50 text-red-700 border border-red-200'
-                        }`}
-                      >
+                      {user.status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          Pending Approval
+                        </span>
+                      ) : (
                         <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            user.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-red-50 text-red-700 border border-red-200'
                           }`}
-                        />
-                        {user.status === 'active' ? 'Active' : 'Deactivated'}
-                      </span>
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'
+                            }`}
+                          />
+                          {user.status === 'active' ? 'Active' : 'Deactivated'}
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3 px-3 text-slate-500 text-[11px]">
                       <div>{user.lastLogin || 'Never logged in'}</div>
                       {user.lastActivity && (
-                        <div className="text-[10px] text-slate-400 truncate max-w-[170px]">
+                        <div className={`text-[10px] truncate max-w-[170px] ${user.status === 'pending' ? 'text-amber-700 font-medium' : 'text-slate-400'}`}>
                           {user.lastActivity}
                         </div>
                       )}
@@ -425,24 +508,46 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <div className="flex items-center justify-end gap-1.5">
                         {!isSuperadminAccount && (
                           <>
-                            <button
-                              onClick={() => handleToggleStatus(user)}
-                              title={user.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
-                              className={`p-1.5 rounded transition-colors ${
-                                user.status === 'active'
-                                  ? 'text-amber-600 hover:bg-amber-50'
-                                  : 'text-emerald-600 hover:bg-emerald-50'
-                              }`}
-                            >
-                              {user.status === 'active' ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(user)}
-                              title="Delete Account"
-                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {user.status === 'pending' ? (
+                              <>
+                                <button
+                                  onClick={() => handleApproveUser(user)}
+                                  className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-all shadow-xs flex items-center gap-1 cursor-pointer hover:scale-105"
+                                  title="Approve and Activate Staff Account"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(user)}
+                                  title="Decline/Reject Registration"
+                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleToggleStatus(user)}
+                                  title={user.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
+                                  className={`p-1.5 rounded transition-colors ${
+                                    user.status === 'active'
+                                      ? 'text-amber-600 hover:bg-amber-50'
+                                      : 'text-emerald-600 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  {user.status === 'active' ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(user)}
+                                  title="Delete Account"
+                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </>
                         )}
                         {isSuperadminAccount && (
@@ -559,6 +664,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     onChange={(e) => setNewPosition(e.target.value as UserPosition)}
                     className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
                   >
+                    <option value="IT Developer">IT Developer</option>
                     <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO)</option>
                     <option value="Licensing Officer">Licensing Officer</option>
                     <option value="Information Officer">Information Officer</option>

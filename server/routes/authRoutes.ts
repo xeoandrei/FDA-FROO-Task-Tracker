@@ -149,10 +149,10 @@ router.post('/register', async (req, res) => {
         : `${middleInitial.trim().toUpperCase()}.`
       : null;
 
-    // Persist to MySQL users table
+    // Persist to MySQL users table with is_active = 0 (Pending Approval)
     await pool.query(
       `INSERT INTO users (id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, is_active, last_activity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         id,
         trimmedUsername,
@@ -165,7 +165,7 @@ router.post('/register', async (req, res) => {
         assignedRole,
         resolvedOffice.officeCode,
         resolvedOffice.clusterCode,
-        'Registered staff account',
+        'Awaiting Administrator Approval',
       ]
     );
 
@@ -179,7 +179,7 @@ router.post('/register', async (req, res) => {
           id,
           trimmedEmail,
           assignedRole,
-          `Staff registered account: ${firstName.trim()} ${lastName.trim()} (${position.trim()}) under ${resolvedOffice.officeCode}.`,
+          `Staff registered account: ${firstName.trim()} ${lastName.trim()} (${position.trim()}) under ${resolvedOffice.officeCode}. Awaiting administrator approval.`,
           id,
           `${firstName.trim()} ${lastName.trim()}`,
         ]
@@ -200,13 +200,13 @@ router.post('/register', async (req, res) => {
       office: resolvedOffice.officeCode,
       cluster: resolvedOffice.clusterCode,
       role: assignedRole,
-      status: 'active' as const,
+      status: 'pending' as const,
       createdAt: new Date().toISOString(),
-      lastActivity: 'Registered staff account',
+      lastActivity: 'Awaiting Administrator Approval',
     };
 
     res.status(201).json({
-      message: `Staff account for ${safeUser.firstName} ${safeUser.lastName} registered successfully in the FROO database. You may now sign in.`,
+      message: `Staff account for ${safeUser.firstName} ${safeUser.lastName} submitted successfully! Your account is pending review and approval by the Superadmin or an ODDG-FROO Administrator in the User & Access panel before you can sign in.`,
       user: safeUser,
     });
   } catch (error: any) {
@@ -338,6 +338,11 @@ router.post('/login', async (req, res) => {
     const userRow = rows[0];
 
     if (!userRow.is_active) {
+      if (userRow.last_activity && userRow.last_activity.toLowerCase().includes('awaiting')) {
+        return res.status(403).json({
+          error: 'Your account registration is currently pending approval by the Superadmin or an ODDG-FROO Administrator in the User & Access panel. Please wait for approval before signing in.',
+        });
+      }
       return res.status(403).json({ error: 'Your account has been deactivated. Please contact an administrator.' });
     }
 

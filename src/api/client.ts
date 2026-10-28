@@ -119,10 +119,22 @@ export const api = {
     });
   },
 
-  async updateUserStatus(id: string, status: 'active' | 'deactivated'): Promise<{ success: boolean }> {
+  async updateUserStatus(id: string, status: 'active' | 'deactivated' | 'pending'): Promise<{ success: boolean }> {
     return request(`/api/users/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+  },
+
+  async approveUser(id: string): Promise<{ success: boolean; id: string; status: string; message: string }> {
+    return request(`/api/users/${id}/approve`, {
+      method: 'POST',
+    });
+  },
+
+  async deleteUser(id: string): Promise<{ success: boolean; id: string; message: string }> {
+    return request(`/api/users/${id}`, {
+      method: 'DELETE',
     });
   },
 

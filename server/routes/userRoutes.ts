@@ -25,7 +25,7 @@ router.get('/', authenticateToken, async (_req, res) => {
       office: r.office_code,
       cluster: r.cluster_code,
       role: r.role_code,
-      status: r.is_active ? 'active' : 'deactivated',
+      status: r.is_active ? 'active' : (r.last_activity && r.last_activity.toLowerCase().includes('awaiting') ? 'pending' : 'deactivated'),
       createdAt: r.created_at,
       lastLogin: r.last_login_at,
       lastActivity: r.last_activity,
@@ -165,6 +165,91 @@ router.patch('/:id/status', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN
   } catch (error) {
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Failed to update user status' });
+  }
+});
+
+// POST /api/users/:id/approve - approves and activates a pending staff account
+router.post('/:id/approve', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch user details for audit logging
+    const [uRows]: [any[], any] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+    if (uRows.length === 0) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+    const targetUser = uRows[0];
+
+    await pool.query('UPDATE users SET is_active = 1, last_activity = ? WHERE id = ?', [
+      'Approved by Administrator',
+      id,
+    ]);
+
+    if (req.user) {
+      await pool.query(
+        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          'USER_APPROVED',
+          req.user.id,
+          req.user.email,
+          req.user.role,
+          `Administrator ${req.user.firstName} ${req.user.lastName} approved staff account: ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}, ${targetUser.position}).`,
+          id,
+          `${targetUser.first_name} ${targetUser.last_name}`,
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      id,
+      status: 'active',
+      message: `Staff account for ${targetUser.first_name} ${targetUser.last_name} has been approved and activated.`,
+    });
+  } catch (error) {
+    console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Failed to approve user account' });
+  }
+});
+
+// DELETE /api/users/:id - permanently deletes a staff account
+router.delete('/:id', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const [uRows]: [any[], any] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+    if (uRows.length === 0) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+    const targetUser = uRows[0];
+
+    if (targetUser.email.toLowerCase() === 'amldelgado@fda.gov.ph') {
+      return res.status(403).json({ error: 'The primary Superadmin root account cannot be deleted.' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = ?', [id]);
+
+    if (req.user) {
+      await pool.query(
+        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          'USER_DELETED',
+          req.user.id,
+          req.user.email,
+          req.user.role,
+          `Administrator ${req.user.firstName} ${req.user.lastName} deleted staff account: ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}).`,
+          id,
+          `${targetUser.first_name} ${targetUser.last_name}`,
+        ]
+      );
+    }
+
+    res.json({ success: true, id, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user account' });
   }
 });
 

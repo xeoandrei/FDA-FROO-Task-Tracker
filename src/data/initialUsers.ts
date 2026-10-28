@@ -9,7 +9,7 @@ export const INITIAL_USERS: UserAccount[] = [
     firstName: 'AML',
     middleInitial: 'M.',
     lastName: 'Delgado',
-    position: 'Deputy Director General (DDG-FROO)',
+    position: 'IT Developer',
     office: 'ODDG-FROO',
     role: 'SUPERADMIN',
     status: 'active',

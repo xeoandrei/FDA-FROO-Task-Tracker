@@ -7,6 +7,7 @@ export type UserRole =
   | 'RANK_AND_FILE'; // alias for existing saved sessions
 
 export type UserPosition =
+  | 'IT Developer'
   | 'Deputy Director General (DDG-FROO)'
   | 'ODDG-FROO Staff'
   | 'Cluster Director'
@@ -24,7 +25,7 @@ export interface ClusterInfo {
   regions: string[];
 }
 
-export type AccountStatus = 'active' | 'inactive' | 'deactivated';
+export type AccountStatus = 'active' | 'inactive' | 'deactivated' | 'pending';
 
 export interface UserAccount {
   id: string;
@@ -48,6 +49,7 @@ export type SystemActionType =
   | 'USER_LOGIN'
   | 'USER_LOGOUT'
   | 'USER_REGISTERED'
+  | 'USER_APPROVED'
   | 'USER_STATUS_CHANGED'
   | 'USER_DELETED'
   | 'USER_UPDATED'

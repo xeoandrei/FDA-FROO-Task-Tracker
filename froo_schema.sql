@@ -303,7 +303,7 @@ INSERT IGNORE INTO `offices` (`office_code`, `office_name`, `cluster_code`, `off
 -- SEED INITIAL FDA USERS (Default demo password: password123)
 -- ----------------------------------------------------------------------------
 INSERT IGNORE INTO `users` (`id`, `username`, `email`, `password_hash`, `first_name`, `middle_initial`, `last_name`, `position`, `role_code`, `office_code`, `cluster_code`, `is_active`, `last_activity`) VALUES
-('usr-superadmin', 'amldelgado', 'amldelgado@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'AML', 'M.', 'Delgado', 'Deputy Director General (DDG-FROO)', 'SUPERADMIN', 'ODDG-FROO', NULL, 1, 'Active in System Console'),
+('usr-superadmin', 'amldelgado', 'amldelgado@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'AML', 'M.', 'Delgado', 'IT Developer', 'SUPERADMIN', 'ODDG-FROO', NULL, 1, 'Active in System Console'),
 ('usr-franklin', 'atty.franklin', 'franklin.tabaquin@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Franklin Anthony', 'M.', 'Tabaquin IV', 'Deputy Director General (DDG-FROO)', 'ADMIN', 'ODDG-FROO', NULL, 1, 'Approved regional dispatch slips'),
 ('usr-ton', 'atty.ton', 'ton.froo@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Ton', 'S.', 'Villaruel', 'ODDG-FROO Staff', 'ADMIN', 'ODDG-FROO', NULL, 1, 'Created inspection directives'),
 ('usr-gomel', 'director.gomel', 'gomel.gabuna@fda.gov.ph', '$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm', 'Gomel', 'C.', 'Gabuna', 'Cluster Director', 'CLUSTER_DIRECTOR', 'North Luzon Cluster (NLC)', 'NLC', 1, 'Reviewed NLC regional workload'),

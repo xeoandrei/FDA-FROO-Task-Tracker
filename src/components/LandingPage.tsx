@@ -153,24 +153,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
       });
 
       if (res && res.user) {
-        setRegSuccess(`Account for ${res.user.firstName} ${res.user.lastName} successfully registered in MySQL database! Redirecting to sign in...`);
+        setRegSuccess(`Registration submitted! Your staff account (${res.user.email}) is currently pending approval by the Superadmin or ODDG-FROO Administrator in the User & Access panel before you can sign in.`);
 
-        // Synchronize local cached staff list
+        // Synchronize local cached staff list with pending status
+        const pendingUser = { ...res.user, status: 'pending' as const, lastActivity: 'Awaiting Administrator Approval' };
         const currentStored = getStoredUsers();
         if (!currentStored.some((u) => u.id === res.user.id || u.email.toLowerCase() === res.user.email.toLowerCase())) {
-          saveStoredUsers([res.user, ...currentStored]);
+          saveStoredUsers([pendingUser, ...currentStored]);
         }
 
-        // Set credentials and transition to login modal
+        // Clear password fields
         setLoginIdentifier(res.user.email);
         setLoginPassword('');
         setRegPassword('');
         setRegConfirmPassword('');
-
-        setTimeout(() => {
-          setActiveModal('login');
-          setRegSuccess(null);
-        }, 1500);
         return;
       }
     } catch (apiErr: any) {
@@ -301,7 +297,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
               </div>
               <div className="text-xs font-bold text-white group-hover:text-emerald-300">AML Delgado</div>
               <div className="text-[11px] text-slate-400 truncate">amldelgado@fda.gov.ph</div>
-              <div className="text-[10px] text-emerald-400 mt-2 font-medium">Root Access & Logs</div>
+              <div className="text-[10px] text-emerald-400 mt-2 font-medium">IT Developer • System Console</div>
             </button>
 
             {/* ODDG-FROO Admin */}

@@ -89,7 +89,7 @@ export async function runAutoSeed(): Promise<void> {
           first_name: 'AML',
           middle_initial: 'M.',
           last_name: 'Delgado',
-          position: 'Deputy Director General (DDG-FROO)',
+          position: 'IT Developer',
           role_code: 'SUPERADMIN',
           office_code: 'ODDG-FROO',
           cluster_code: null,

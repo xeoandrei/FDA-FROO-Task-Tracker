@@ -74,7 +74,7 @@ export const fallbackStore = {
       first_name: 'AML',
       middle_initial: 'M.',
       last_name: 'Delgado',
-      position: 'Deputy Director General (DDG-FROO)',
+      position: 'IT Developer',
       role_code: 'SUPERADMIN',
       office_code: 'ODDG-FROO',
       cluster_code: null,
@@ -497,7 +497,31 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     return [found ? [found] : [], []];
   }
 
-  // 9. USERS: Update last login
+  // 9. USERS: Update status (approve / deactivate / activate)
+  if (normalizedSql.startsWith('UPDATE users SET is_active = ?')) {
+    const isActiveVal = Number(params[0]);
+    const userId = params[params.length - 1];
+    const user = fallbackStore.users.find((u) => u.id === userId);
+    if (user) {
+      user.is_active = isActiveVal;
+      if (isActiveVal === 1) {
+        user.last_activity = 'Approved by Administrator';
+      } else {
+        user.last_activity = 'Deactivated by Administrator';
+      }
+    }
+    return [{ affectedRows: user ? 1 : 0 }, []] as any;
+  }
+
+  // 9b. USERS: Delete user
+  if (normalizedSql.startsWith('DELETE FROM users WHERE id = ?')) {
+    const userId = params[0];
+    const prevCount = fallbackStore.users.length;
+    fallbackStore.users = fallbackStore.users.filter((u) => u.id !== userId);
+    return [{ affectedRows: prevCount - fallbackStore.users.length }, []] as any;
+  }
+
+  // 9c. USERS: Update last login / activity
   if (normalizedSql.startsWith('UPDATE users SET last_login_at = NOW()') || normalizedSql.startsWith('UPDATE users SET last_activity = ?')) {
     const userId = params[params.length - 1];
     const user = fallbackStore.users.find((u) => u.id === userId);
@@ -508,9 +532,19 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     return [{ affectedRows: user ? 1 : 0 }, []] as any;
   }
 
-  // 10. USERS: Insert new user (Registration)
+  // 10. USERS: Insert new user (Registration or Admin creation)
   if (normalizedSql.startsWith('INSERT INTO users')) {
-    const [id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, last_activity] = params;
+    // Check if 13 params (with is_active) or 12 params
+    let is_active = 1;
+    let last_activity = 'Registered staff account';
+    if (params.length >= 13) {
+      is_active = Number(params[11]);
+      last_activity = params[12];
+    } else {
+      last_activity = params[params.length - 1];
+    }
+
+    const [id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code] = params;
     const newUser = {
       id,
       username,
@@ -523,9 +557,9 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
       role_code,
       office_code,
       cluster_code,
-      is_active: 1,
+      is_active,
       last_login_at: null,
-      last_activity: last_activity || 'Registered staff account',
+      last_activity: last_activity || (is_active ? 'Account active' : 'Awaiting Administrator Approval'),
       created_at: new Date().toISOString(),
     };
     fallbackStore.users.push(newUser);
@@ -536,6 +570,7 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
   if (normalizedSql.includes('FROM users ORDER BY last_name ASC') || normalizedSql.includes('FROM users')) {
     const mapped = fallbackStore.users.map((u) => ({
       ...u,
+      status: u.is_active ? 'active' : (u.last_activity && u.last_activity.toLowerCase().includes('awaiting') ? 'pending' : 'deactivated'),
       office_name: fallbackStore.offices.find((o) => o.office_code === u.office_code)?.office_name || u.office_code,
     }));
     return [mapped, []];

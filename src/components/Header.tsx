@@ -52,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   dbStatus = 'offline',
 }) => {
   const isAdminOrSuper = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
+  const pendingUsersCount = allStaffUsers.filter((u) => u.status === 'pending').length;
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs font-sans">
@@ -164,11 +165,16 @@ export const Header: React.FC<HeaderProps> = ({
               <>
                 <button
                   onClick={onOpenUserManagement}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-2xs transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-2xs transition cursor-pointer relative"
                   title="Manage Staff Accounts"
                 >
                   <Users className="w-3.5 h-3.5 text-[#056839]" />
                   <span>Users & Access</span>
+                  {pendingUsersCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold animate-pulse leading-none">
+                      {pendingUsersCount}
+                    </span>
+                  )}
                 </button>
 
                 <button
