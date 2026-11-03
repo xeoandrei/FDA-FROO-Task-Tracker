@@ -148,6 +148,8 @@ export const CATEGORIES = [
   'Licensing & Compliance',
   'Product Recall & Seizure',
   'Consumer Complaint',
+  'Policy Related Matters',
+  'Admin Matters',
 ];
 
 export const ORIGINS = [
@@ -164,10 +166,8 @@ export const ORIGINS = [
   'Others',
 ];
 
-export const PRIORITIES: ('Low' | 'Medium' | 'High' | 'Urgent')[] = [
-  'Low',
-  'Medium',
-  'High',
+export const PRIORITIES: ('Normal' | 'Urgent')[] = [
+  'Normal',
   'Urgent',
 ];
 

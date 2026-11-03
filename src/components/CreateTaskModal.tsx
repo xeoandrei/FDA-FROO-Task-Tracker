@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, MapPin, User, Building, AlertCircle, Hash, Sparkles } from 'lucide-react';
-import { Task, TaskPriority, TaskStatus, FrooUserPersona } from '../types/task';
+import React, { useState } from 'react';
+import { X, AlertCircle, Hash, Check, Users } from 'lucide-react';
+import { Task, TaskPriority, FrooUserPersona } from '../types/task';
 import { UserAccount } from '../types/auth';
 import { CATEGORIES, ORIGINS, PRIORITIES, FROO_OFFICES } from '../data/offices';
 import { formatDateTime } from '../utils/storage';
@@ -30,7 +30,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     : currentPersona?.name || 'Authorized Officer';
   const creatorOffice = currentUser?.office || currentPersona?.officeName || 'ODDG-FROO';
 
-  // Available offices based on jurisdiction
+  // Available offices based on jurisdiction (used to auto-resolve region from assignee/creator)
   const availableOffices = allowedRegions && allowedRegions.length > 0
     ? FROO_OFFICES.filter((o) =>
         allowedRegions.some(
@@ -42,90 +42,72 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       )
     : FROO_OFFICES;
 
-  const defaultRegion = availableOffices[0]?.code || 'NCR';
+  const defaultRegion = availableOffices[0]?.code || 'ODDG-FROO';
 
-  // Staff users list for Assigned To dropdown
+  // Staff users list for Assigned To multi-select
   const staffList = allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers();
-  const activeStaff = staffList.filter((u) => u.status !== 'deactivated');
+  const activeStaff = staffList.filter((u) => u.status === 'active' || (!u.status && u.status !== 'deactivated'));
 
   const [dtn, setDtn] = useState('');
+  const [isDtnNa, setIsDtnNa] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [origin, setOrigin] = useState('FROO');
-  const [region, setRegion] = useState(defaultRegion);
-  const [assignedTo, setAssignedTo] = useState('');
-  const [assignedUserEmail, setAssignedUserEmail] = useState('');
-  const [assignedOffice, setAssignedOffice] = useState('');
-  const [priority, setPriority] = useState<TaskPriority>('Medium');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [priority, setPriority] = useState<TaskPriority>('Normal');
   const [dueDate, setDueDate] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
 
-  // Selected office object
-  const selectedOfficeObj = FROO_OFFICES.find(
-    (o) => o.code === region || o.shortLabel === region || o.name === region
-  );
-
-  useEffect(() => {
-    if (availableOffices.length > 0 && !availableOffices.some((o) => o.code === region)) {
-      setRegion(availableOffices[0].code);
-    }
-  }, [allowedRegions]);
-
   // Handle DTN changes locked to 14 numeric digits
   const handleDtnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isDtnNa) return;
     const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 14);
     setDtn(numericOnly);
   };
 
-  // Quick auto-generate 14-digit FDA standard DTN
-  const handleGenerateDtn = () => {
-    const now = new Date();
-    const yyyy = now.getFullYear().toString();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const randSeq = Math.floor(100000 + Math.random() * 900000).toString();
-    setDtn(`${yyyy}${mm}${dd}${randSeq}`);
+  // Toggle N/A checkbox for DTN
+  const handleToggleDtnNa = (checked: boolean) => {
+    setIsDtnNa(checked);
+    if (checked) {
+      setDtn('N/A');
+    } else {
+      setDtn('');
+    }
   };
 
-  // Assignee selection handler
-  const handleSelectAssignee = (val: string) => {
-    setAssignedTo(val);
-    const matched = activeStaff.find((u) => `${u.firstName} ${u.lastName}` === val);
-    if (matched) {
-      setAssignedUserEmail(matched.email);
-      setAssignedOffice(matched.office);
-      if (matched.office && matched.office !== 'ODDG-FROO') {
-        const matchOffice = availableOffices.find(
-          (o) => o.code === matched.office || o.name === matched.office || o.shortLabel === matched.office
-        );
-        if (matchOffice) {
-          setRegion(matchOffice.code);
-        }
-      }
-    }
+  // Toggle staff member in multi-select Assigned To
+  const handleToggleAssignee = (fullName: string) => {
+    setSelectedAssignees((prev) =>
+      prev.includes(fullName) ? prev.filter((name) => name !== fullName) : [...prev, fullName]
+    );
   };
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dtn.trim()) {
-      setError('Please enter the 14-digit DTN (Document Tracking Number)');
-      return;
+    const finalDtn = isDtnNa ? 'N/A' : dtn.trim();
+
+    if (!isDtnNa) {
+      if (!finalDtn) {
+        setError('Please enter the 14-digit DTN or check N/A if there is no DTN');
+        return;
+      }
+      if (finalDtn.length !== 14) {
+        setError(`DTN must be locked to 14 digits (currently ${finalDtn.length} digits), or check N/A`);
+        return;
+      }
     }
-    if (dtn.trim().length !== 14) {
-      setError(`DTN must be locked to 14 digits (currently ${dtn.trim().length} digits)`);
-      return;
-    }
+
     if (!taskTitle.trim()) {
       setError('Please enter a task title');
       return;
     }
-    if (!assignedTo.trim()) {
-      setError('Please select an assignee from the staff dropdown');
+    if (selectedAssignees.length === 0) {
+      setError('Please select at least one assignee');
       return;
     }
     if (!dueDate) {
@@ -133,22 +115,59 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       return;
     }
 
+    // Derive primary assignee details and office/region automatically
+    const matchedStaffList = selectedAssignees
+      .map((name) => activeStaff.find((u) => `${u.firstName} ${u.lastName}` === name))
+      .filter((u): u is UserAccount => Boolean(u));
+
+    const primaryStaff = matchedStaffList[0];
+    const assignedUserEmail = primaryStaff?.email;
+
+    let derivedRegion = defaultRegion;
+    let derivedOffice = creatorOffice;
+
+    if (primaryStaff?.office) {
+      derivedOffice = primaryStaff.office;
+      const matchOffice = FROO_OFFICES.find(
+        (o) =>
+          o.code.toLowerCase() === primaryStaff.office.toLowerCase() ||
+          o.name.toLowerCase() === primaryStaff.office.toLowerCase() ||
+          o.shortLabel.toLowerCase() === primaryStaff.office.toLowerCase()
+      );
+      if (matchOffice) {
+        derivedRegion = matchOffice.code;
+      } else {
+        derivedRegion = primaryStaff.office;
+      }
+    } else if (creatorOffice) {
+      const matchCreatorOffice = FROO_OFFICES.find(
+        (o) =>
+          o.code.toLowerCase() === creatorOffice.toLowerCase() ||
+          o.name.toLowerCase() === creatorOffice.toLowerCase() ||
+          o.shortLabel.toLowerCase() === creatorOffice.toLowerCase()
+      );
+      if (matchCreatorOffice) {
+        derivedRegion = matchCreatorOffice.code;
+      }
+    }
+
+    const assignedToCombined = selectedAssignees.join(', ');
     const newId = `FROO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const todayFormatted = formatDateTime(new Date());
 
     const newTask: Task = {
       id: newId,
-      dtn: dtn.trim(),
+      dtn: finalDtn,
       taskTitle: taskTitle.trim(),
       category,
       origin,
-      assignedTo: assignedTo.trim(),
-      assignedOffice: assignedOffice || selectedOfficeObj?.shortLabel || region,
+      assignedTo: assignedToCombined,
+      assignedOffice: derivedOffice,
       assignedUserEmail: assignedUserEmail || undefined,
-      region,
+      region: derivedRegion,
       dueDate,
-      scheduledDate: scheduledDate || dueDate,
-      location: location.trim() || `${region} Regional Office`,
+      scheduledDate: scheduledDate || undefined,
+      location: location.trim() || 'In-Office / N/A',
       description: description.trim() || 'No additional instructions provided.',
       outcome: 'Scheduled',
       remarks: `Task created by ${creatorName} (${creatorOffice})`,
@@ -159,7 +178,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       activityHistory: [
         {
           id: `act-${Date.now()}`,
-          action: `Task created and assigned to ${assignedTo.trim()}. DTN: ${dtn.trim()}.`,
+          action: `Task created and assigned to ${assignedToCombined}. DTN: ${finalDtn}.`,
           actor: creatorName,
           actorOffice: creatorOffice,
           date: todayFormatted,
@@ -173,10 +192,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
     // Reset state
     setDtn('');
+    setIsDtnNa(false);
     setTaskTitle('');
-    setAssignedTo('');
-    setAssignedUserEmail('');
-    setAssignedOffice('');
+    setSelectedAssignees([]);
+    setPriority('Normal');
+    setDueDate('');
+    setScheduledDate('');
     setDescription('');
     setLocation('');
     setError('');
@@ -184,8 +205,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4">
-      {/* Modal Dialog (Matching Screenshot 2) */}
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -203,7 +223,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs max-h-[82vh] overflow-y-auto">
           {error && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -211,7 +231,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
           )}
 
-          {/* DTN (Document Tracking Number) */}
+          {/* DTN (Document Tracking Number) with N/A checkbox */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-slate-700 font-semibold flex items-center gap-1.5">
@@ -219,40 +239,49 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 <span>DTN (Document Tracking Number)</span>
                 <span className="text-rose-500">*</span>
               </label>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
-                    dtn.length === 14
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                      : dtn.length > 0
-                      ? 'bg-amber-50 text-amber-800 border-amber-300'
-                      : 'bg-slate-100 text-slate-500 border-slate-200'
-                  }`}
-                >
-                  {dtn.length}/14 digits
-                </span>
-                <button
-                  type="button"
-                  onClick={handleGenerateDtn}
-                  className="text-[11px] text-[#056839] hover:underline font-semibold cursor-pointer inline-flex items-center gap-1"
-                  title="Generate a 14-digit FDA DTN based on today's date and sequence"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Generate DTN</span>
-                </button>
+              <div className="flex items-center gap-3">
+                {!isDtnNa && (
+                  <span
+                    className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
+                      dtn.length === 14
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : dtn.length > 0
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    {dtn.length}/14 digits
+                  </span>
+                )}
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none text-slate-700 font-semibold bg-slate-100 hover:bg-slate-200/70 px-2 py-0.5 rounded border border-slate-200 transition">
+                  <input
+                    type="checkbox"
+                    checked={isDtnNa}
+                    onChange={(e) => handleToggleDtnNa(e.target.checked)}
+                    className="rounded border-slate-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="text-[11px]">N/A</span>
+                </label>
               </div>
             </div>
             <input
               type="text"
               inputMode="numeric"
               maxLength={14}
-              value={dtn}
+              disabled={isDtnNa}
+              value={isDtnNa ? 'N/A' : dtn}
               onChange={handleDtnChange}
               placeholder="Enter 14-digit DTN (e.g., 20261026001234)"
-              className="w-full text-xs font-mono tracking-wider border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
+              className={`w-full text-xs font-mono tracking-wider border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839] ${
+                isDtnNa
+                  ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                  : 'border-slate-300 bg-white text-slate-900'
+              }`}
             />
             <p className="text-[10.5px] text-slate-400 mt-1">
-              Locked to 14 numeric digits per official FDA Philippines document tracking system.
+              {isDtnNa
+                ? 'DTN marked as N/A (Not Applicable) for this task.'
+                : 'Locked to 14 numeric digits per official FDA Philippines document tracking system, or check N/A if none.'}
             </p>
           </div>
 
@@ -307,41 +336,88 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
           </div>
 
-          {/* Assigned To & Region */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">
-                Assigned To <span className="text-rose-500">*</span>
+          {/* Assigned To (Multiple Selection) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-slate-700 font-semibold flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-[#056839]" />
+                <span>Assigned To (Multiple Selection)</span>
+                <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={assignedTo}
-                onChange={(e) => handleSelectAssignee(e.target.value)}
-                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839] bg-white text-slate-800 cursor-pointer"
-              >
-                <option value="">Select Assignee ({activeStaff.length} staff)...</option>
-                {activeStaff.map((u) => (
-                  <option key={u.id} value={`${u.firstName} ${u.lastName}`}>
-                    {u.firstName} {u.lastName}, {u.position} ({u.role})
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] text-slate-500 font-medium">
+                  {selectedAssignees.length} selected
+                </span>
+                {selectedAssignees.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAssignees([])}
+                    className="text-[10.5px] text-rose-600 hover:underline font-medium cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">
-                Region
-              </label>
-              <select
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
-              >
-                {availableOffices.map((office) => (
-                  <option key={office.id} value={office.code}>
-                    {office.name}
-                  </option>
+            {/* Selected Assignee Tags */}
+            {selectedAssignees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-emerald-50/60 border border-emerald-200 rounded-lg">
+                {selectedAssignees.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1 bg-white text-[#056839] border border-emerald-300 px-2 py-0.5 rounded-md text-[11px] font-semibold shadow-2xs"
+                  >
+                    <span>{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAssignee(name)}
+                      className="text-slate-400 hover:text-rose-600 ml-0.5 cursor-pointer"
+                      title={`Remove ${name}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
                 ))}
-              </select>
+              </div>
+            )}
+
+            {/* Multi-select Staff Checklist */}
+            <div className="border border-slate-300 rounded-lg max-h-36 overflow-y-auto divide-y divide-slate-100 bg-white">
+              {activeStaff.length === 0 ? (
+                <div className="px-3 py-2.5 text-slate-400 text-center">
+                  No active staff available
+                </div>
+              ) : (
+                activeStaff.map((u) => {
+                  const fullName = `${u.firstName} ${u.lastName}`;
+                  const isChecked = selectedAssignees.includes(fullName);
+                  return (
+                    <label
+                      key={u.id}
+                      className={`flex items-center justify-between px-3 py-2 cursor-pointer transition select-none ${
+                        isChecked ? 'bg-emerald-50/70 text-slate-900 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleAssignee(fullName)}
+                          className="rounded border-slate-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer shrink-0"
+                        />
+                        <div className="truncate">
+                          <span className="text-xs">{fullName}</span>
+                          <span className="text-[10.5px] text-slate-500 ml-1.5">
+                            — {u.position} ({u.office})
+                          </span>
+                        </div>
+                      </div>
+                      {isChecked && <Check className="w-3.5 h-3.5 text-[#056839] shrink-0" />}
+                    </label>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -366,7 +442,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
-                Due Date
+                Due Date <span className="text-rose-500">*</span>
               </label>
               <input
                 type="date"
@@ -375,6 +451,29 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
               />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-slate-700 font-semibold mb-1">
+              Description
+            </label>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the task..."
+              className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
+            />
+          </div>
+
+          {/* Separation Line & Note before Scheduled Date & Location */}
+          <div className="pt-2">
+            <div className="border-t border-slate-200 pt-3">
+              <p className="text-[11px] text-slate-500 italic">
+                Input here if the task requires personnel to go outside the office to perform their assigned duties.
+              </p>
             </div>
           </div>
 
@@ -400,24 +499,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="Enter location"
+                placeholder="Enter location (if outside office)"
                 className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
               />
             </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-slate-700 font-semibold mb-1">
-              Description
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the task..."
-              className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
-            />
           </div>
 
           {/* Actions */}

@@ -2,9 +2,9 @@ import { UserAccount, UserRole, UserPosition, SystemLog, SystemActionType, Clust
 import { INITIAL_USERS } from '../data/initialUsers';
 import { FROO_CLUSTERS, getClusterForRegion } from '../data/clusters';
 
-const USERS_STORAGE_KEY = 'froo_user_accounts_v2';
+const USERS_STORAGE_KEY = 'froo_user_accounts_v3';
 const CURRENT_USER_KEY = 'froo_current_user_session_v2';
-const SYSTEM_LOGS_KEY = 'froo_system_audit_logs_v2';
+const SYSTEM_LOGS_KEY = 'froo_system_audit_logs_v3';
 
 export const SUPERADMIN_EMAIL = 'amldelgado@fda.gov.ph';
 
@@ -34,6 +34,22 @@ export function determineRole(email: string, office: string, position: UserPosit
   return 'STANDARD';
 }
 
+function deduplicateUsers(users: UserAccount[]): UserAccount[] {
+  const seenIds = new Set<string>();
+  const seenEmails = new Set<string>();
+  const result: UserAccount[] = [];
+
+  for (const u of users) {
+    if (!u || !u.id || !u.email) continue;
+    const normEmail = u.email.toLowerCase().trim();
+    if (seenIds.has(u.id) || seenEmails.has(normEmail)) continue;
+    seenIds.add(u.id);
+    seenEmails.add(normEmail);
+    result.push(u);
+  }
+  return result;
+}
+
 export function getStoredUsers(): UserAccount[] {
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
@@ -44,22 +60,25 @@ export function getStoredUsers(): UserAccount[] {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
       // Normalize any older RANK_AND_FILE to STANDARD and ensure superadmin has Andrei Manuel L. Delgado & IT Developer position
-      const normalized = parsed.map((u: UserAccount) => {
-        const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
-        return {
-          ...u,
-          firstName: isSuper ? 'Andrei Manuel' : u.firstName,
-          middleInitial: isSuper ? 'L.' : u.middleInitial,
-          lastName: isSuper ? 'Delgado' : u.lastName,
-          role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
-          position: isSuper ? 'IT Developer' : u.position,
-        };
-      });
+      const normalized = deduplicateUsers(
+        parsed.map((u: UserAccount) => {
+          const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
+          return {
+            ...u,
+            id: isSuper ? 'usr-superadmin' : u.id,
+            firstName: isSuper ? 'Andrei Manuel' : u.firstName,
+            middleInitial: isSuper ? 'L.' : u.middleInitial,
+            lastName: isSuper ? 'Delgado' : u.lastName,
+            role: (u.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : u.role,
+            position: isSuper ? 'IT Developer' : u.position,
+          };
+        })
+      );
       // Ensure superadmin always exists
       const hasSuper = normalized.some((u: UserAccount) => u.email.toLowerCase() === SUPERADMIN_EMAIL);
       if (!hasSuper) {
         const superUser = INITIAL_USERS[0];
-        const combined = [superUser, ...normalized];
+        const combined = deduplicateUsers([superUser, ...normalized]);
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(combined));
         return combined;
       }
@@ -74,18 +93,21 @@ export function getStoredUsers(): UserAccount[] {
 
 export function saveStoredUsers(users: UserAccount[]): void {
   try {
-    const normalized = users.map((u) => {
-      const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
-      return isSuper
-        ? {
-            ...u,
-            firstName: 'Andrei Manuel',
-            middleInitial: 'L.',
-            lastName: 'Delgado',
-            position: 'IT Developer' as UserPosition,
-          }
-        : u;
-    });
+    const normalized = deduplicateUsers(
+      users.map((u) => {
+        const isSuper = u.email.toLowerCase() === SUPERADMIN_EMAIL || u.id === 'usr-superadmin';
+        return isSuper
+          ? {
+              ...u,
+              id: 'usr-superadmin',
+              firstName: 'Andrei Manuel',
+              middleInitial: 'L.',
+              lastName: 'Delgado',
+              position: 'IT Developer' as UserPosition,
+            }
+          : u;
+      })
+    );
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(normalized));
   } catch (e) {
     console.error('Failed to save users', e);

@@ -82,8 +82,10 @@ app.listen(PORT, () => {
   console.log(`🚀 FROO Task Tracker API running at http://localhost:${PORT}`);
   console.log(`=======================================================`);
 
-  // Attempt database auto-seed in background if DB is ready
-  runAutoSeed().catch((err) => {
-    console.log('Database auto-seed deferred until MySQL container is available.');
-  });
+  // Check database connection first, then run auto-seed
+  checkDatabaseConnection()
+    .then(() => runAutoSeed())
+    .catch(() => {
+      console.log('Database auto-seed deferred until MySQL container is available.');
+    });
 });

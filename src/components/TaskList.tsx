@@ -61,6 +61,8 @@ export const TaskList: React.FC<TaskListProps> = ({
     switch (priority) {
       case 'Urgent':
         return <span className="text-red-700 font-semibold text-xs">Urgent</span>;
+      case 'Normal':
+        return <span className="text-slate-700 font-medium text-xs">Normal</span>;
       case 'High':
         return <span className="text-rose-600 font-medium text-xs">High</span>;
       case 'Medium':

@@ -107,7 +107,9 @@ async function fetchTaskById(taskId: string): Promise<any | null> {
     });
   }
 
-  const assignedFullName = t.assigned_first_name
+  const assignedFullName = t.assigned_to_names
+    ? t.assigned_to_names
+    : t.assigned_first_name
     ? `${t.assigned_first_name} ${t.assigned_last_name}`
     : 'Unassigned';
 
@@ -219,38 +221,48 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       dtn,
     } = req.body;
 
-    // Validate 14-digit DTN
-    if (!dtn || !/^[0-9]{14}$/.test(String(dtn).trim())) {
-      return res.status(400).json({ error: 'DTN (Document Tracking Number) must be exactly 14 digits.' });
+    const cleanDtn = dtn ? String(dtn).trim() : 'N/A';
+
+    // Validate 14-digit DTN or N/A
+    if (cleanDtn.toUpperCase() !== 'N/A' && !/^[0-9]{14}$/.test(cleanDtn)) {
+      return res.status(400).json({ error: 'DTN (Document Tracking Number) must be 14 digits or N/A.' });
     }
 
-    if (!taskTitle || !category || !origin || !region || !dueDate) {
-      return res.status(400).json({ error: 'Task Title, Category, Origin, Region, and Due Date are required.' });
+    if (!taskTitle || !category || !origin || !dueDate) {
+      return res.status(400).json({ error: 'Task Title, Category, Origin, and Due Date are required.' });
     }
 
-    const cleanDtn = String(dtn).trim();
+    const finalDtn = cleanDtn.toUpperCase() === 'N/A' ? 'N/A' : cleanDtn;
     const taskId = `FROO-TSK-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
 
     await connection.beginTransaction();
 
-    // Check DTN uniqueness
-    const [existingDtn]: [any[], any] = await connection.query('SELECT id FROM tasks WHERE dtn = ?', [cleanDtn]);
-    if (existingDtn.length > 0) {
-      await connection.rollback();
-      return res.status(409).json({ error: `A task with DTN ${cleanDtn} already exists.` });
+    // Check DTN uniqueness only when not N/A
+    if (finalDtn !== 'N/A') {
+      const [existingDtn]: [any[], any] = await connection.query('SELECT id FROM tasks WHERE dtn = ?', [finalDtn]);
+      if (existingDtn.length > 0) {
+        await connection.rollback();
+        return res.status(409).json({ error: `A task with DTN ${finalDtn} already exists.` });
+      }
     }
 
-    // Resolve assigned user id if not provided directly
+    // Resolve primary assigned user id and office from first assignee if multiple are provided
+    const assignedNamesString = assignedTo ? String(assignedTo).trim() : '';
+    const firstAssigneeName = assignedNamesString.split(',')[0]?.trim() || '';
+
     let targetUserId = assignedToUserId || null;
-    if (!targetUserId && assignedTo) {
+    let assigneeOfficeCode: string | null = null;
+
+    if (!targetUserId && firstAssigneeName) {
       const [uRows]: [any[], any] = await connection.query(
-        `SELECT id FROM users
+        `SELECT id, office_code FROM users
          WHERE LOWER(CONCAT(first_name, ' ', last_name)) = ? OR LOWER(email) = ? OR id = ?
          LIMIT 1`,
-        [assignedTo.toLowerCase().trim(), assignedTo.toLowerCase().trim(), assignedTo]
+        [firstAssigneeName.toLowerCase(), firstAssigneeName.toLowerCase(), firstAssigneeName]
       );
       if (uRows.length > 0) {
         targetUserId = uRows[0].id;
+        assigneeOfficeCode = uRows[0].office_code;
       }
     }
 
@@ -258,27 +270,42 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const actorName = req.user ? `${req.user.firstName} ${req.user.lastName}` : 'ODDG-FROO Administrator';
     const actorOffice = req.user?.office || 'ODDG-FROO';
 
+    // Ensure assigned_office_code is a valid office_code in offices table
+    let validOfficeCode = assigneeOfficeCode || region || actorOffice || 'ODDG-FROO';
+    const [officeRows]: [any[], any] = await connection.query(
+      'SELECT office_code FROM offices WHERE office_code = ? OR office_name = ? LIMIT 1',
+      [validOfficeCode, validOfficeCode]
+    );
+    if (officeRows.length > 0) {
+      validOfficeCode = officeRows[0].office_code;
+    } else {
+      validOfficeCode = 'ODDG-FROO';
+    }
+
+    const resolvedRegion = region || validOfficeCode;
+
     await connection.query(
       `INSERT INTO tasks (
         id, dtn, task_title, category, origin, origin_details,
-        assigned_to_user_id, assigned_office_code, region, due_date,
+        assigned_to_user_id, assigned_to_names, assigned_office_code, region, due_date,
         scheduled_date, location, description, outcome, status, priority, created_by_user_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'Open', ?, ?)`,
       [
         taskId,
-        cleanDtn,
+        finalDtn,
         taskTitle.trim(),
         category,
         origin,
         originDetails || null,
         targetUserId,
-        region,
-        region,
+        assignedNamesString || null,
+        validOfficeCode,
+        resolvedRegion,
         dueDate,
         scheduledDate || null,
-        location || 'Field Office Jurisdiction',
+        location || 'In-Office / N/A',
         description || '',
-        priority || 'Medium',
+        priority || 'Normal',
         actorId,
       ]
     );
@@ -293,7 +320,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         actorName,
         actorOffice,
         actorId,
-        `Task assigned for field regulatory execution in ${region}. DTN: ${cleanDtn}`,
+        `Task assigned to ${assignedNamesString || 'Staff'}. DTN: ${finalDtn}`,
       ]
     );
 
@@ -372,9 +399,12 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
     } else if (userRole === 'REGIONAL_SUPERVISOR') {
       authorized = userOffice.includes(taskRegion) || taskRegion.includes(userOffice);
     } else {
-      // STANDARD staff: must be assigned to them or in same office
+      // STANDARD staff: must be assigned to them (by ID or multi-select name) or in same office
+      const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+      const assignedNames = (task.assigned_to_names || '').toLowerCase();
       authorized =
         task.assigned_to_user_id === user.id ||
+        assignedNames.includes(userFullName) ||
         userOffice.includes(taskRegion) ||
         taskRegion.includes(userOffice);
     }

@@ -1,6 +1,6 @@
 export type TaskStatus = 'Open' | 'In Progress' | 'Completed' | 'Overdue';
 
-export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type TaskPriority = 'Normal' | 'Urgent' | 'Low' | 'Medium' | 'High';
 
 export interface ActivityItem {
   id: string;

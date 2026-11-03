@@ -2,7 +2,7 @@ import { Task, FrooUserPersona } from '../types/task';
 import { INITIAL_TASKS } from '../data/initialTasks';
 import { DEFAULT_PERSONAS } from '../data/offices';
 
-const TASKS_STORAGE_KEY = 'froo_task_tracker_data_v1';
+const TASKS_STORAGE_KEY = 'froo_task_tracker_data_v2';
 const PERSONA_STORAGE_KEY = 'froo_task_tracker_current_persona_v1';
 
 export function getStoredTasks(): Task[] {
@@ -10,28 +10,8 @@ export function getStoredTasks(): Task[] {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY);
     if (!raw) return INITIAL_TASKS;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.map((t) => {
-        const init = INITIAL_TASKS.find((it) => it.id === t.id);
-        const dtn = t.dtn || init?.dtn;
-        const rawSlips = (!t.dispatchSlips || t.dispatchSlips.length === 0) && init?.dispatchSlips
-          ? init.dispatchSlips
-          : (t.dispatchSlips || []);
-        const slips = rawSlips.map((s: any) => ({
-          ...s,
-          recommendedBy: s.recommendedBy
-            ? {
-                name: s.recommendedBy.name?.includes('GOMEL C. GABUNA')
-                  ? 'JON JOSEPH H. MEDRANO'
-                  : s.recommendedBy.name,
-                title: s.recommendedBy.title?.includes('Executive Assistant Designate for FROO')
-                  ? 'Executive Assistant III, ODDG-FROO'
-                  : s.recommendedBy.title,
-              }
-            : s.recommendedBy,
-        }));
-        return { ...t, dtn, dispatchSlips: slips };
-      });
+    if (Array.isArray(parsed)) {
+      return parsed;
     }
     return INITIAL_TASKS;
   } catch (e) {

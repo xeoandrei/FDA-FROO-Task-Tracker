@@ -11,8 +11,12 @@ export function isUserAssignedToTask(task: Task, user: UserAccount | null): bool
   const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase().trim();
   const assigned = (task.assignedTo || '').toLowerCase().trim();
 
-  // 1. Direct full name match
-  if (assigned === userFullName) return true;
+  // 1. Direct full name or comma-separated multi-assignee match
+  const assigneeList = assigned
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (assigned === userFullName || assigneeList.includes(userFullName)) return true;
 
   // 2. Direct email match
   if (task.assignedUserEmail && task.assignedUserEmail.toLowerCase() === user.email.toLowerCase()) {

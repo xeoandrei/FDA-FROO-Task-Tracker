@@ -1,7 +1,17 @@
-import { pool } from './db';
+import { pool, getIsDatabaseAlive } from './db';
 import { hashPassword } from './auth';
 
+let hasSeededMySQL = false;
+let hasSeededFallback = false;
+let seedInProgress = false;
+
 export async function runAutoSeed(): Promise<void> {
+  const isMySQL = getIsDatabaseAlive();
+  if ((isMySQL && hasSeededMySQL) || (!isMySQL && hasSeededFallback) || seedInProgress) {
+    return;
+  }
+
+  seedInProgress = true;
   const connection = await pool.getConnection();
 
   try {
@@ -61,206 +71,69 @@ export async function runAutoSeed(): Promise<void> {
     const [existingCols]: [any[], any] = await connection.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
     );
-    const colSet = new Set(existingCols.map((c: any) => c.COLUMN_NAME));
+    const colSet = new Set(existingCols.map((c: any) => String(c.COLUMN_NAME || c.column_name || '')));
 
-    if (!colSet.has('username')) {
+    if (colSet.size > 0 && !colSet.has('username')) {
       await connection.query(`ALTER TABLE users ADD COLUMN username VARCHAR(100) NULL AFTER id, ADD UNIQUE KEY uq_users_username (username)`);
     }
-    if (!colSet.has('cluster_code')) {
+    if (colSet.size > 0 && !colSet.has('cluster_code')) {
       await connection.query(`ALTER TABLE users ADD COLUMN cluster_code VARCHAR(20) NULL AFTER office_code`);
     }
-    if (!colSet.has('last_activity')) {
+    if (colSet.size > 0 && !colSet.has('last_activity')) {
       await connection.query(`ALTER TABLE users ADD COLUMN last_activity VARCHAR(255) NULL AFTER last_login_at`);
     }
 
-    // 5. Check if users table is populated
+    // 4b. Ensure tasks table supports multiple assignees (assigned_to_names), N/A DTNs, and Normal/Urgent priorities
+    const [taskCols]: [any[], any] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tasks'`
+    );
+    const taskColSet = new Set(taskCols.map((c: any) => String(c.COLUMN_NAME || c.column_name || '')));
+    if (taskColSet.size > 0 && !taskColSet.has('assigned_to_names')) {
+      await connection.query(`ALTER TABLE tasks ADD COLUMN assigned_to_names TEXT NULL AFTER assigned_to_user_id`);
+    }
+    if (isMySQL) {
+      try {
+        await connection.query(`ALTER TABLE tasks DROP CHECK chk_tasks_dtn_format`);
+      } catch {
+        // Check constraint already dropped or not present
+      }
+      try {
+        await connection.query(`ALTER TABLE tasks DROP INDEX uq_tasks_dtn`);
+      } catch {
+        // Unique index already dropped or not present
+      }
+      try {
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN dtn VARCHAR(50) NOT NULL DEFAULT 'N/A'`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN priority VARCHAR(50) NOT NULL DEFAULT 'Normal'`);
+      } catch {
+        // Ignore if already modified
+      }
+    }
+
+    // 5. Only seed the primary Superadmin if the users table is completely empty (do not add extra demo users)
     const [userRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM users');
     const userCount = userRows[0]?.count || 0;
 
     if (userCount === 0) {
-      console.log('🌱 Seeding initial FDA users with bcrypt hashed passwords...');
       const defaultPasswordHash = await hashPassword('password123');
-
-      const initialUsersToSeed = [
-        {
-          id: 'usr-superadmin',
-          username: 'amldelgado',
-          email: 'amldelgado@fda.gov.ph',
-          first_name: 'Andrei Manuel',
-          middle_initial: 'L.',
-          last_name: 'Delgado',
-          position: 'IT Developer',
-          role_code: 'SUPERADMIN',
-          office_code: 'ODDG-FROO',
-          cluster_code: null,
-          last_activity: 'Active in System Console',
-        },
-        {
-          id: 'usr-franklin',
-          username: 'atty.franklin',
-          email: 'franklin.tabaquin@fda.gov.ph',
-          first_name: 'Franklin Anthony',
-          middle_initial: 'M.',
-          last_name: 'Tabaquin IV',
-          position: 'Deputy Director General (DDG-FROO)',
-          role_code: 'ADMIN',
-          office_code: 'ODDG-FROO',
-          cluster_code: null,
-          last_activity: 'Approved regional dispatch slips',
-        },
-        {
-          id: 'usr-ton',
-          username: 'atty.ton',
-          email: 'ton.froo@fda.gov.ph',
-          first_name: 'Ton',
-          middle_initial: 'S.',
-          last_name: 'Villaruel',
-          position: 'ODDG-FROO Staff',
-          role_code: 'ADMIN',
-          office_code: 'ODDG-FROO',
-          cluster_code: null,
-          last_activity: 'Created inspection directives',
-        },
-        {
-          id: 'usr-gomel',
-          username: 'director.gomel',
-          email: 'gomel.gabuna@fda.gov.ph',
-          first_name: 'Gomel',
-          middle_initial: 'C.',
-          last_name: 'Gabuna',
-          position: 'Cluster Director',
-          role_code: 'CLUSTER_DIRECTOR',
-          office_code: 'North Luzon Cluster (NLC)',
-          cluster_code: 'NLC',
-          last_activity: 'Reviewed NLC regional workload',
-        },
-        {
-          id: 'usr-slc-dir',
-          username: 'director.slc',
-          email: 'slc.director@fda.gov.ph',
-          first_name: 'Maria Elena',
-          middle_initial: 'V.',
-          last_name: 'Ramos',
-          position: 'Cluster Director',
-          role_code: 'CLUSTER_DIRECTOR',
-          office_code: 'South Luzon Cluster (SLC)',
-          cluster_code: 'SLC',
-          last_activity: 'Audited CALABARZON & NCR investigations',
-        },
-        {
-          id: 'usr-sup-ncr',
-          username: 'sup.ncr',
-          email: 'ncr.supervisor@fda.gov.ph',
-          first_name: 'Camille',
-          middle_initial: 'B.',
-          last_name: 'Bautista',
-          position: 'Regional Supervisor',
-          role_code: 'REGIONAL_SUPERVISOR',
-          office_code: 'Region NCR',
-          cluster_code: null,
-          last_activity: 'Approved FDRO inspection dispatch',
-        },
-        {
-          id: 'usr-sup-r4a',
-          username: 'sup.r4a',
-          email: 'r4a.supervisor@fda.gov.ph',
-          first_name: 'Ronaldo',
-          middle_initial: 'C.',
-          last_name: 'Castillo',
-          position: 'Regional Supervisor',
-          role_code: 'REGIONAL_SUPERVISOR',
-          office_code: 'Region 4A',
-          cluster_code: null,
-          last_activity: 'Assigned establishment investigation',
-        },
-        {
-          id: 'usr-fdro-juan',
-          username: 'juan.fdro',
-          email: 'jdelacruz@fda.gov.ph',
-          first_name: 'Juan',
-          middle_initial: 'D.',
-          last_name: 'Dela Cruz',
-          position: 'Food-Drug Regulation Officer (FDRO)',
-          role_code: 'STANDARD',
-          office_code: 'Region NCR',
-          cluster_code: null,
-          last_activity: 'Field regulatory inspection',
-        },
-        {
-          id: 'usr-fdro-maria',
-          username: 'maria.fdro',
-          email: 'msantos@fda.gov.ph',
-          first_name: 'Maria',
-          middle_initial: 'P.',
-          last_name: 'Santos',
-          position: 'Food-Drug Regulation Officer (FDRO)',
-          role_code: 'STANDARD',
-          office_code: 'Region 4A',
-          cluster_code: null,
-          last_activity: 'Awaiting task receipt for establishment investigation',
-        },
-        {
-          id: 'usr-fdro-melgo',
-          username: 'anthonette.fdro',
-          email: 'anthonette.melgo@fda.gov.ph',
-          first_name: 'Anthonette',
-          middle_initial: 'J.',
-          last_name: 'Melgo',
-          position: 'Food-Drug Regulation Officer (FDRO)',
-          role_code: 'STANDARD',
-          office_code: 'Region 10',
-          cluster_code: null,
-          last_activity: 'Field dispatched for pharmacy PMS',
-        },
-        {
-          id: 'usr-lo-carlos',
-          username: 'carlos.lo',
-          email: 'cmendoza@fda.gov.ph',
-          first_name: 'Carlos',
-          middle_initial: 'E.',
-          last_name: 'Mendoza',
-          position: 'Licensing Officer',
-          role_code: 'STANDARD',
-          office_code: 'Region 3',
-          cluster_code: null,
-          last_activity: 'Evaluated LTO renewal compliance',
-        },
-        {
-          id: 'usr-io-gemma',
-          username: 'gemma.io',
-          email: 'gemma.bobis@fda.gov.ph',
-          first_name: 'Gemma',
-          middle_initial: 'R.',
-          last_name: 'Bobis',
-          position: 'Information Officer',
-          role_code: 'STANDARD',
-          office_code: 'Region 5',
-          cluster_code: null,
-          last_activity: 'Published public health advisory report',
-        },
-      ];
-
-      for (const u of initialUsersToSeed) {
-        await connection.query(
-          `INSERT INTO users (id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, is_active, last_activity)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-          [
-            u.id,
-            u.username,
-            u.email,
-            defaultPasswordHash,
-            u.first_name,
-            u.middle_initial,
-            u.last_name,
-            u.position,
-            u.role_code,
-            u.office_code,
-            u.cluster_code,
-            u.last_activity,
-          ]
-        );
-      }
-      console.log('✅ Initial FDA staff users seeded.');
+      await connection.query(
+        `INSERT INTO users (id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, is_active, last_activity)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        [
+          'usr-superadmin',
+          'amldelgado',
+          'amldelgado@fda.gov.ph',
+          defaultPasswordHash,
+          'Andrei Manuel',
+          'L.',
+          'Delgado',
+          'IT Developer',
+          'SUPERADMIN',
+          'ODDG-FROO',
+          null,
+          'Active in System Console',
+        ]
+      );
     }
 
     // Ensure Superadmin record always reflects Andrei Manuel L. Delgado & IT Developer in MySQL
@@ -273,128 +146,16 @@ export async function runAutoSeed(): Promise<void> {
        WHERE id = 'usr-superadmin' OR LOWER(email) = 'amldelgado@fda.gov.ph'`
     );
 
-    // 5. Seed initial tasks if tasks table is empty
-    const [taskRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM tasks');
-    const taskCount = taskRows[0]?.count || 0;
-
-    if (taskCount === 0) {
-      console.log('🌱 Seeding sample tasks...');
-      const sampleTasks = [
-        {
-          id: 'FROO-TSK-2026-001',
-          dtn: '20260310001824',
-          task_title: 'Conduct Good Distribution Practice (GDP) Inspection of ABC Pharma Warehouse',
-          category: 'Good Distribution Practice (GDP) Inspection',
-          origin: 'FDA Centers / Offices',
-          origin_details: 'Center for Drug Regulation and Research (CDRR) Referral',
-          assigned_to_user_id: 'usr-fdro-juan',
-          assigned_office_code: 'Region NCR',
-          region: 'Region NCR',
-          due_date: '2026-11-15',
-          location: 'Taguig City, Metro Manila',
-          description: 'Comprehensive Good Distribution Practice verification and cold-chain temperature log monitoring for critical biologic medicines.',
-          outcome: 'Pending',
-          status: 'Open',
-          priority: 'High',
-          created_by_user_id: 'usr-ton',
-        },
-        {
-          id: 'FROO-TSK-2026-002',
-          dtn: '20260310001825',
-          task_title: 'Post-Market Surveillance of Cosmetic Creams and Skincare Products',
-          category: 'Post-Market Surveillance (PMS)',
-          origin: 'DOH / Other Government Agencies',
-          origin_details: 'Inter-Agency Task Force Consumer Alert',
-          assigned_to_user_id: 'usr-fdro-maria',
-          assigned_office_code: 'Region 4A',
-          region: 'Region 4A',
-          due_date: '2026-11-20',
-          location: 'Calamba City, Laguna',
-          description: 'Mystery shopping and random product sampling of unregistered cosmetic whitening creams suspected of elevated mercury contents.',
-          outcome: 'Pending',
-          status: 'Open',
-          priority: 'Urgent',
-          created_by_user_id: 'usr-ton',
-        },
-      ];
-
-      for (const t of sampleTasks) {
-        await connection.query(
-          `INSERT INTO tasks (id, dtn, task_title, category, origin, origin_details, assigned_to_user_id, assigned_office_code, region, due_date, location, description, outcome, status, priority, created_by_user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            t.id,
-            t.dtn,
-            t.task_title,
-            t.category,
-            t.origin,
-            t.origin_details,
-            t.assigned_to_user_id,
-            t.assigned_office_code,
-            t.region,
-            t.due_date,
-            t.location,
-            t.description,
-            t.outcome,
-            t.status,
-            t.priority,
-            t.created_by_user_id,
-          ]
-        );
-
-        // Seed initial activity log
-        await connection.query(
-          `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            t.id,
-            'Task initialized and assigned in system',
-            'Ton S. Villaruel',
-            'ODDG-FROO',
-            'usr-ton',
-            'Directive logged from CDRR and assigned for regional execution.',
-            'Open',
-          ]
-        );
-      }
-      console.log('✅ Baseline operational tasks seeded.');
-    }
-
-    // 6. Seed initial dispatch slip if dispatch_slips table is empty
-    const [dispatchRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM dispatch_slips');
-    const dispatchCount = dispatchRows[0]?.count || 0;
-
-    if (dispatchCount === 0) {
-      console.log('🌱 Seeding sample dispatch slip...');
-      await connection.query(
-        `INSERT IGNORE INTO dispatch_slips (
-          id, task_id, ctrl_no, dispatch_date,
-          purpose_inspection, purpose_pms, purpose_meeting, purpose_investigation, purpose_destruction,
-          others_purpose, time_of_arrival, team_leader, team_members, driver, vehicle_plate_number,
-          recommended_by_name, recommended_by_title, approved_by_name, approved_by_title,
-          status, created_by_user_id
-        ) VALUES (
-          'DSP-2026-001', 'FROO-TSK-2026-001', 'NCR-2026-0001', 'October 28, 2026',
-          1, 0, 0, 0, 0,
-          'N/A', '09:00 AM', 'JUAN D. DELA CRUZ', 'NONE', 'HANNIBAL C. ECOBEN', 'AVANZA SAB 9141',
-          'CAMILLE B. BAUTISTA', 'Regional Supervisor, Region NCR',
-          'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV', 'Deputy Director General - Field Regulatory Operations Office',
-          'Pending Regional Supervisor Approval', 'usr-fdro-juan'
-        )`
-      );
-
-      await connection.query(
-        `INSERT IGNORE INTO dispatch_slip_destinations (
-          id, dispatch_slip_id, sequence_no, establishment_name, location_address
-        ) VALUES (
-          1, 'DSP-2026-001', 1, 'ABC PHARMA WAREHOUSE', 'Taguig City, Metro Manila'
-        )`
-      );
-      console.log('✅ Sample dispatch slip seeded.');
+    if (isMySQL) {
+      hasSeededMySQL = true;
+    } else {
+      hasSeededFallback = true;
     }
   } catch (err) {
     console.warn('⚠️ Auto-seed notice (database may already be configured or offline):', (err as Error).message);
   } finally {
+    seedInProgress = false;
     connection.release();
   }
 }
+

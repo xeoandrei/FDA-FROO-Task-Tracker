@@ -90,12 +90,12 @@ export default function App() {
             api.getTasks(),
           ]);
 
-          if (isMounted && usersRes.status === 'fulfilled' && usersRes.value.length > 0) {
-            setAllStaffUsers(usersRes.value);
+          if (isMounted && usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
             saveStoredUsers(usersRes.value);
+            setAllStaffUsers(getStoredUsers());
           }
 
-          if (isMounted && tasksRes.status === 'fulfilled' && tasksRes.value.length > 0) {
+          if (isMounted && tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value)) {
             setTasks(tasksRes.value);
             saveStoredTasks(tasksRes.value);
           }
@@ -185,11 +185,11 @@ export default function App() {
         api.getUsers(),
         api.getTasks(),
       ]);
-      if (usersRes.status === 'fulfilled' && usersRes.value.length > 0) {
-        setAllStaffUsers(usersRes.value);
+      if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
         saveStoredUsers(usersRes.value);
+        setAllStaffUsers(getStoredUsers());
       }
-      if (tasksRes.status === 'fulfilled' && tasksRes.value.length > 0) {
+      if (tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value)) {
         setTasks(tasksRes.value);
         saveStoredTasks(tasksRes.value);
       }

@@ -333,7 +333,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                     type="text"
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="e.g. amldelgado or user@fda.gov.ph"
+                    placeholder="e.g. username or user@fda.gov.ph"
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#056839] focus:ring-1 focus:ring-[#056839]"
                     required
                   />

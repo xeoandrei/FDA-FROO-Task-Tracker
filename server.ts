@@ -85,10 +85,12 @@ async function startServer() {
     console.log(`=======================================================`);
   });
 
-  // Check database in background
-  checkDatabaseConnection().catch((err) => {
-    console.log('ℹ️ Running in resilient fallback mode until MySQL container connects.');
-  });
+  // Check database in background and run auto-seed
+  checkDatabaseConnection()
+    .then(() => runAutoSeed())
+    .catch(() => {
+      console.log('ℹ️ Running in resilient fallback mode until MySQL container connects.');
+    });
 }
 
 startServer().catch((err) => {
