@@ -48,6 +48,7 @@ export const fallbackStore = {
     { office_code: 'Visayas Cluster (VC)', office_name: 'Visayas Cluster (VC)', cluster_code: 'VBC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Mindanao Cluster (MOC)', office_name: 'Mindanao Cluster (MOC)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region NCR', office_name: 'Regional Field Office - NCR', cluster_code: 'SLC', office_type: 'REGIONAL', is_active: 1 },
+    { office_code: 'NCR', office_name: 'Region NCR', cluster_code: 'SLC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region 1', office_name: 'Regional Field Office - Ilocos Region (Region 1)', cluster_code: 'NLC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region 2', office_name: 'Regional Field Office - Cagayan Valley (Region 2)', cluster_code: 'NLC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region 3', office_name: 'Regional Field Office - Central Luzon (Region 3)', cluster_code: 'NLC', office_type: 'REGIONAL', is_active: 1 },
@@ -61,9 +62,16 @@ export const fallbackStore = {
     { office_code: 'Region 10', office_name: 'Regional Field Office - Northern Mindanao (Region 10)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region 11', office_name: 'Regional Field Office - Davao Region (Region 11)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'Region 12', office_name: 'Regional Field Office - SOCCSKSARGEN (Region 12)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
+    { office_code: 'Region 12 / BARMM', office_name: 'Region 12 / BARMM', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
+    { office_code: 'Region 13', office_name: 'Region 13 (Caraga)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'CARAGA', office_name: 'Regional Field Office - Caraga (Region 13)', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'CAR', office_name: 'Regional Field Office - Cordillera Administrative Region', cluster_code: 'NLC', office_type: 'REGIONAL', is_active: 1 },
+    { office_code: 'Region CAR', office_name: 'Region CAR', cluster_code: 'NLC', office_type: 'REGIONAL', is_active: 1 },
     { office_code: 'BARMM', office_name: 'Regional Field Office - BARMM', cluster_code: 'MOC', office_type: 'REGIONAL', is_active: 1 },
+    { office_code: 'FDA Centers', office_name: 'FDA Product & Regulatory Centers', cluster_code: null, office_type: 'CENTRAL', is_active: 1 },
+    { office_code: 'LSSC', office_name: 'Legal Services Support Center (LSSC)', cluster_code: null, office_type: 'CENTRAL', is_active: 1 },
+    { office_code: 'CSL', office_name: 'Common Services Laboratory (CSL)', cluster_code: null, office_type: 'CENTRAL', is_active: 1 },
+    { office_code: 'PPO', office_name: 'Policy and Planning Office (PPO)', cluster_code: null, office_type: 'CENTRAL', is_active: 1 },
   ],
   users: [
     {
@@ -421,6 +429,34 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
       task.completed_at = new Date().toISOString();
     }
     return [{ affectedRows: task ? 1 : 0 }, []] as any;
+  }
+
+  // 17b. TASKS: Select by ID for update/delete, update operational details, or delete task
+  if (normalizedSql.startsWith('SELECT * FROM tasks WHERE id = ?')) {
+    const taskId = params[0];
+    const found = fallbackStore.tasks.find((t) => t.id === taskId);
+    return [found ? [found] : [], []];
+  }
+  if (normalizedSql.startsWith('UPDATE tasks SET scheduled_date = ?')) {
+    const taskId = params[params.length - 1];
+    const task = fallbackStore.tasks.find((t) => t.id === taskId);
+    if (task) {
+      task.scheduled_date = params[0];
+      task.location = params[1];
+      task.outcome = params[2];
+      task.remarks = params[3];
+      task.region = params[4];
+      if (params.length >= 7) {
+        task.assigned_to_names = params[5];
+      }
+    }
+    return [{ affectedRows: task ? 1 : 0 }, []] as any;
+  }
+  if (normalizedSql.startsWith('DELETE FROM tasks WHERE id = ?')) {
+    const taskId = params[0];
+    const before = fallbackStore.tasks.length;
+    fallbackStore.tasks = fallbackStore.tasks.filter((t) => t.id !== taskId);
+    return [{ affectedRows: before - fallbackStore.tasks.length }, []] as any;
   }
 
   // 18. TASK ACTIVITY LOGS

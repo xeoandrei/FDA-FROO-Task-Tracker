@@ -555,7 +555,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                 Category: <strong>{task.category}</strong>
               </span>
               <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200">
-                Region: <strong>{task.region}</strong>
+                Region / Office: <strong>{task.region}</strong>
               </span>
             </div>
           </div>
@@ -668,7 +668,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
             </div>
 
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Region</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Region / Office</span>
               <span className="font-semibold text-slate-800 text-xs">{task.region}</span>
             </div>
 

@@ -245,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                 }`}
               >
-                All Offices (17)
+                All Regions/Offices
               </button>
             ) : null}
 

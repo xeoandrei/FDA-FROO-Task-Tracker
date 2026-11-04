@@ -137,6 +137,38 @@ export const FROO_OFFICES: FrooOffice[] = [
     coverage: 'Caraga Region (Agusan del Norte/Sur, Surigao del Norte/Sur, Dinagat Islands)',
     defaultPersonnel: ['Leopoldo Plaza', 'Clarita Amante', 'Rolando Curato'],
   },
+  {
+    id: 'fda-centers',
+    code: 'FDA Centers',
+    name: 'FDA Centers',
+    shortLabel: 'FDA Centers',
+    coverage: 'FDA Product & Regulatory Centers (CDRR, CDRRHR, CCHUHSRR, CFRR)',
+    defaultPersonnel: [],
+  },
+  {
+    id: 'lssc',
+    code: 'LSSC',
+    name: 'LSSC',
+    shortLabel: 'LSSC',
+    coverage: 'Legal Services Support Center (LSSC)',
+    defaultPersonnel: [],
+  },
+  {
+    id: 'csl',
+    code: 'CSL',
+    name: 'CSL',
+    shortLabel: 'CSL',
+    coverage: 'Common Services Laboratory (CSL)',
+    defaultPersonnel: [],
+  },
+  {
+    id: 'ppo',
+    code: 'PPO',
+    name: 'PPO',
+    shortLabel: 'PPO',
+    coverage: 'Policy and Planning Office (PPO)',
+    defaultPersonnel: [],
+  },
 ];
 
 export const CATEGORIES = [

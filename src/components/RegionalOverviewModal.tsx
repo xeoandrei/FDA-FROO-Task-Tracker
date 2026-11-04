@@ -32,7 +32,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
               <h3 className="text-lg font-bold">FROO Regional Field Offices Directory & Caseload</h3>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Live operational workload across all 17 regulatory offices under the Deputy Director General.
+              Live operational workload across all {FROO_OFFICES.length} regulatory offices and centers.
             </p>
           </div>
           <button
@@ -47,14 +47,23 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
         <div className="p-6 overflow-y-auto space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {FROO_OFFICES.map((office) => {
-              // Match tasks either by region or assignedOffice
-              const officeTasks = tasks.filter(
-                (t) =>
-                  t.region === office.code ||
-                  t.region === office.shortLabel ||
+              // Match tasks either by region (including comma-separated multi-select) or assignedOffice
+              const officeTasks = tasks.filter((t) => {
+                const regionParts = (t.region || '')
+                  .split(',')
+                  .map((r) => r.trim().toLowerCase())
+                  .filter(Boolean);
+                const codeLower = office.code.toLowerCase();
+                const shortLower = office.shortLabel.toLowerCase();
+                const nameLower = office.name.toLowerCase();
+                return (
+                  regionParts.includes(codeLower) ||
+                  regionParts.includes(shortLower) ||
+                  regionParts.includes(nameLower) ||
                   t.assignedOffice === office.shortLabel ||
                   t.assignedOffice === office.name
-              );
+                );
+              });
 
               const openCount = officeTasks.filter((t) => t.status === 'Open').length;
               const inProgressCount = officeTasks.filter((t) => t.status === 'In Progress').length;
@@ -108,7 +117,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
 
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-[11px] text-slate-400 truncate max-w-[140px]">
-                      {office.defaultPersonnel[0]}
+                      {office.defaultPersonnel[0] || office.code}
                     </span>
                     <button
                       onClick={() => {
@@ -129,7 +138,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>All 17 FROO Offices covered (ODDG Central & 16 Regional Field Units)</span>
+          <span>All {FROO_OFFICES.length} FROO & FDA Offices covered</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer"

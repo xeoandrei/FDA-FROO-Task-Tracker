@@ -49,6 +49,7 @@ export async function runAutoSeed(): Promise<void> {
       ('Visayas Cluster (VC)', 'Visayas Cluster (VC)', 'VBC', 'REGIONAL'),
       ('Mindanao Cluster (MOC)', 'Mindanao Cluster (MOC)', 'MOC', 'REGIONAL'),
       ('Region NCR', 'Regional Field Office - NCR', 'SLC', 'REGIONAL'),
+      ('NCR', 'Region NCR', 'SLC', 'REGIONAL'),
       ('Region 1', 'Regional Field Office - Ilocos Region (Region 1)', 'NLC', 'REGIONAL'),
       ('Region 2', 'Regional Field Office - Cagayan Valley (Region 2)', 'NLC', 'REGIONAL'),
       ('Region 3', 'Regional Field Office - Central Luzon (Region 3)', 'NLC', 'REGIONAL'),
@@ -62,9 +63,16 @@ export async function runAutoSeed(): Promise<void> {
       ('Region 10', 'Regional Field Office - Northern Mindanao (Region 10)', 'MOC', 'REGIONAL'),
       ('Region 11', 'Regional Field Office - Davao Region (Region 11)', 'MOC', 'REGIONAL'),
       ('Region 12', 'Regional Field Office - SOCCSKSARGEN (Region 12)', 'MOC', 'REGIONAL'),
+      ('Region 12 / BARMM', 'Region 12 / BARMM', 'MOC', 'REGIONAL'),
+      ('Region 13', 'Region 13 (Caraga)', 'MOC', 'REGIONAL'),
       ('CARAGA', 'Regional Field Office - Caraga (Region 13)', 'MOC', 'REGIONAL'),
       ('CAR', 'Regional Field Office - Cordillera Administrative Region', 'NLC', 'REGIONAL'),
-      ('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL');
+      ('Region CAR', 'Region CAR', 'NLC', 'REGIONAL'),
+      ('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL'),
+      ('FDA Centers', 'FDA Product & Regulatory Centers', NULL, 'CENTRAL'),
+      ('LSSC', 'Legal Services Support Center (LSSC)', NULL, 'CENTRAL'),
+      ('CSL', 'Common Services Laboratory (CSL)', NULL, 'CENTRAL'),
+      ('PPO', 'Policy and Planning Office (PPO)', NULL, 'CENTRAL');
     `);
 
     // 4. Ensure users table has required columns (in case created from an older schema version)
@@ -83,7 +91,7 @@ export async function runAutoSeed(): Promise<void> {
       await connection.query(`ALTER TABLE users ADD COLUMN last_activity VARCHAR(255) NULL AFTER last_login_at`);
     }
 
-    // 4b. Ensure tasks table supports multiple assignees (assigned_to_names), N/A DTNs, and Normal/Urgent priorities
+    // 4b. Ensure tasks table supports multiple assignees (assigned_to_names), multiple regions, N/A DTNs, and Normal/Urgent priorities
     const [taskCols]: [any[], any] = await connection.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tasks'`
     );
@@ -104,6 +112,7 @@ export async function runAutoSeed(): Promise<void> {
       }
       try {
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN dtn VARCHAR(50) NOT NULL DEFAULT 'N/A'`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN region VARCHAR(255) NOT NULL`);
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN priority VARCHAR(50) NOT NULL DEFAULT 'Normal'`);
       } catch {
         // Ignore if already modified

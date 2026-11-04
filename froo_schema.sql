@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS `tasks` (
   `assigned_to_user_id` CHAR(36) NULL,
   `assigned_to_names` TEXT NULL,
   `assigned_office_code` VARCHAR(50) NOT NULL,
-  `region` VARCHAR(50) NOT NULL,
+  `region` VARCHAR(255) NOT NULL,
   `due_date` DATE NOT NULL,
   `scheduled_date` DATE NULL,
   `location` VARCHAR(255) NOT NULL,
@@ -282,6 +282,7 @@ INSERT IGNORE INTO `offices` (`office_code`, `office_name`, `cluster_code`, `off
 ('Visayas Cluster (VC)', 'Visayas Cluster (VC)', 'VBC', 'REGIONAL'),
 ('Mindanao Cluster (MOC)', 'Mindanao Cluster (MOC)', 'MOC', 'REGIONAL'),
 ('Region NCR', 'Regional Field Office - NCR', 'SLC', 'REGIONAL'),
+('NCR', 'Region NCR', 'SLC', 'REGIONAL'),
 ('Region 1', 'Regional Field Office - Ilocos Region (Region 1)', 'NLC', 'REGIONAL'),
 ('Region 2', 'Regional Field Office - Cagayan Valley (Region 2)', 'NLC', 'REGIONAL'),
 ('Region 3', 'Regional Field Office - Central Luzon (Region 3)', 'NLC', 'REGIONAL'),
@@ -295,9 +296,16 @@ INSERT IGNORE INTO `offices` (`office_code`, `office_name`, `cluster_code`, `off
 ('Region 10', 'Regional Field Office - Northern Mindanao (Region 10)', 'MOC', 'REGIONAL'),
 ('Region 11', 'Regional Field Office - Davao Region (Region 11)', 'MOC', 'REGIONAL'),
 ('Region 12', 'Regional Field Office - SOCCSKSARGEN (Region 12)', 'MOC', 'REGIONAL'),
+('Region 12 / BARMM', 'Region 12 / BARMM', 'MOC', 'REGIONAL'),
+('Region 13', 'Region 13 (Caraga)', 'MOC', 'REGIONAL'),
 ('CARAGA', 'Regional Field Office - Caraga (Region 13)', 'MOC', 'REGIONAL'),
 ('CAR', 'Regional Field Office - Cordillera Administrative Region', 'NLC', 'REGIONAL'),
-('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL');
+('Region CAR', 'Region CAR', 'NLC', 'REGIONAL'),
+('BARMM', 'Regional Field Office - BARMM', 'MOC', 'REGIONAL'),
+('FDA Centers', 'FDA Product & Regulatory Centers', NULL, 'CENTRAL'),
+('LSSC', 'Legal Services Support Center (LSSC)', NULL, 'CENTRAL'),
+('CSL', 'Common Services Laboratory (CSL)', NULL, 'CENTRAL'),
+('PPO', 'Policy and Planning Office (PPO)', NULL, 'CENTRAL');
 
 -- ----------------------------------------------------------------------------
 -- SEED PRIMARY SUPERADMIN ACCOUNT

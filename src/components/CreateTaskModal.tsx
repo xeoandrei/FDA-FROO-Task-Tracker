@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertCircle, Hash, Check, Users } from 'lucide-react';
+import { X, AlertCircle, Hash, Check, Users, Building2, Search } from 'lucide-react';
 import { Task, TaskPriority, FrooUserPersona } from '../types/task';
 import { UserAccount } from '../types/auth';
 import { CATEGORIES, ORIGINS, PRIORITIES, FROO_OFFICES } from '../data/offices';
@@ -30,7 +30,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     : currentPersona?.name || 'Authorized Officer';
   const creatorOffice = currentUser?.office || currentPersona?.officeName || 'ODDG-FROO';
 
-  // Available offices based on jurisdiction (used to auto-resolve region from assignee/creator)
+  // Available Regions / Offices based on jurisdiction
   const availableOffices = allowedRegions && allowedRegions.length > 0
     ? FROO_OFFICES.filter((o) =>
         allowedRegions.some(
@@ -42,8 +42,6 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       )
     : FROO_OFFICES;
 
-  const defaultRegion = availableOffices[0]?.code || 'ODDG-FROO';
-
   // Staff users list for Assigned To multi-select
   const staffList = allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers();
   const activeStaff = staffList.filter((u) => u.status === 'active' || (!u.status && u.status !== 'deactivated'));
@@ -54,12 +52,32 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [origin, setOrigin] = useState('FROO');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>('Normal');
   const [dueDate, setDueDate] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
+
+  // Filtered staff based on search bar in Assigned To
+  const filteredStaff = activeStaff.filter((u) => {
+    if (!assigneeSearchQuery.trim()) return true;
+    const q = assigneeSearchQuery.toLowerCase().trim();
+    const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+    const pos = (u.position || '').toLowerCase();
+    const off = (u.office || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const uname = (u.username || '').toLowerCase();
+    return (
+      fullName.includes(q) ||
+      pos.includes(q) ||
+      off.includes(q) ||
+      email.includes(q) ||
+      uname.includes(q)
+    );
+  });
 
   // Handle DTN changes locked to 14 numeric digits
   const handleDtnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,6 +100,13 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const handleToggleAssignee = (fullName: string) => {
     setSelectedAssignees((prev) =>
       prev.includes(fullName) ? prev.filter((name) => name !== fullName) : [...prev, fullName]
+    );
+  };
+
+  // Toggle Region / Office in multi-select Region / Office
+  const handleToggleRegion = (regionCode: string) => {
+    setSelectedRegions((prev) =>
+      prev.includes(regionCode) ? prev.filter((r) => r !== regionCode) : [...prev, regionCode]
     );
   };
 
@@ -110,12 +135,16 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       setError('Please select at least one assignee');
       return;
     }
+    if (selectedRegions.length === 0) {
+      setError('Please select at least one Region / Office');
+      return;
+    }
     if (!dueDate) {
       setError('Please select a due date');
       return;
     }
 
-    // Derive primary assignee details and office/region automatically
+    // Derive primary assignee details and office/region
     const matchedStaffList = selectedAssignees
       .map((name) => activeStaff.find((u) => `${u.firstName} ${u.lastName}` === name))
       .filter((u): u is UserAccount => Boolean(u));
@@ -123,34 +152,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     const primaryStaff = matchedStaffList[0];
     const assignedUserEmail = primaryStaff?.email;
 
-    let derivedRegion = defaultRegion;
-    let derivedOffice = creatorOffice;
-
-    if (primaryStaff?.office) {
-      derivedOffice = primaryStaff.office;
-      const matchOffice = FROO_OFFICES.find(
-        (o) =>
-          o.code.toLowerCase() === primaryStaff.office.toLowerCase() ||
-          o.name.toLowerCase() === primaryStaff.office.toLowerCase() ||
-          o.shortLabel.toLowerCase() === primaryStaff.office.toLowerCase()
-      );
-      if (matchOffice) {
-        derivedRegion = matchOffice.code;
-      } else {
-        derivedRegion = primaryStaff.office;
-      }
-    } else if (creatorOffice) {
-      const matchCreatorOffice = FROO_OFFICES.find(
-        (o) =>
-          o.code.toLowerCase() === creatorOffice.toLowerCase() ||
-          o.name.toLowerCase() === creatorOffice.toLowerCase() ||
-          o.shortLabel.toLowerCase() === creatorOffice.toLowerCase()
-      );
-      if (matchCreatorOffice) {
-        derivedRegion = matchCreatorOffice.code;
-      }
-    }
-
+    const combinedRegion = selectedRegions.join(', ');
+    const derivedOffice = selectedRegions[0] || primaryStaff?.office || creatorOffice;
     const assignedToCombined = selectedAssignees.join(', ');
     const newId = `FROO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const todayFormatted = formatDateTime(new Date());
@@ -164,7 +167,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       assignedTo: assignedToCombined,
       assignedOffice: derivedOffice,
       assignedUserEmail: assignedUserEmail || undefined,
-      region: derivedRegion,
+      region: combinedRegion,
       dueDate,
       scheduledDate: scheduledDate || undefined,
       location: location.trim() || 'In-Office / N/A',
@@ -178,7 +181,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       activityHistory: [
         {
           id: `act-${Date.now()}`,
-          action: `Task created and assigned to ${assignedToCombined}. DTN: ${finalDtn}.`,
+          action: `Task created and assigned to ${assignedToCombined} (${combinedRegion}). DTN: ${finalDtn}.`,
           actor: creatorName,
           actorOffice: creatorOffice,
           date: todayFormatted,
@@ -195,6 +198,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     setIsDtnNa(false);
     setTaskTitle('');
     setSelectedAssignees([]);
+    setAssigneeSearchQuery('');
+    setSelectedRegions([]);
     setPriority('Normal');
     setDueDate('');
     setScheduledDate('');
@@ -382,14 +387,38 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               </div>
             )}
 
+            {/* Search bar for Assigned To */}
+            <div className="relative mb-1.5">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={assigneeSearchQuery}
+                onChange={(e) => setAssigneeSearchQuery(e.target.value)}
+                placeholder="Search personnel by name, position, or office..."
+                className="w-full text-xs border border-slate-300 rounded-lg pl-8 pr-7 py-1.5 bg-slate-50/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
+              />
+              {assigneeSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setAssigneeSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             {/* Multi-select Staff Checklist */}
             <div className="border border-slate-300 rounded-lg max-h-36 overflow-y-auto divide-y divide-slate-100 bg-white">
-              {activeStaff.length === 0 ? (
+              {filteredStaff.length === 0 ? (
                 <div className="px-3 py-2.5 text-slate-400 text-center">
-                  No active staff available
+                  {assigneeSearchQuery.trim()
+                    ? `No personnel matching "${assigneeSearchQuery}"`
+                    : 'No active staff available'}
                 </div>
               ) : (
-                activeStaff.map((u) => {
+                filteredStaff.map((u) => {
                   const fullName = `${u.firstName} ${u.lastName}`;
                   const isChecked = selectedAssignees.includes(fullName);
                   return (
@@ -418,6 +447,86 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   );
                 })
               )}
+            </div>
+          </div>
+
+          {/* Region / Office (Multiple Selection) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-slate-700 font-semibold flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-[#056839]" />
+                <span>Region / Office (Multiple Selection)</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] text-slate-500 font-medium">
+                  {selectedRegions.length} selected
+                </span>
+                {selectedRegions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRegions([])}
+                    className="text-[10.5px] text-rose-600 hover:underline font-medium cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Region / Office Tags */}
+            {selectedRegions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-emerald-50/60 border border-emerald-200 rounded-lg">
+                {selectedRegions.map((regCode) => (
+                  <span
+                    key={regCode}
+                    className="inline-flex items-center gap-1 bg-white text-[#056839] border border-emerald-300 px-2 py-0.5 rounded-md text-[11px] font-semibold shadow-2xs"
+                  >
+                    <span>{regCode}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleRegion(regCode)}
+                      className="text-slate-400 hover:text-rose-600 ml-0.5 cursor-pointer"
+                      title={`Remove ${regCode}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Multi-select Region / Office Checklist */}
+            <div className="border border-slate-300 rounded-lg max-h-36 overflow-y-auto divide-y divide-slate-100 bg-white">
+              {availableOffices.map((o) => {
+                const isChecked = selectedRegions.includes(o.code);
+                return (
+                  <label
+                    key={o.id}
+                    className={`flex items-center justify-between px-3 py-2 cursor-pointer transition select-none ${
+                      isChecked ? 'bg-emerald-50/70 text-slate-900 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleRegion(o.code)}
+                        className="rounded border-slate-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer shrink-0"
+                      />
+                      <div className="truncate">
+                        <span className="text-xs">{o.shortLabel}</span>
+                        {o.coverage && (
+                          <span className="text-[10.5px] text-slate-500 ml-1.5">
+                            — {o.coverage}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isChecked && <Check className="w-3.5 h-3.5 text-[#056839] shrink-0" />}
+                  </label>
+                );
+              })}
             </div>
           </div>
 

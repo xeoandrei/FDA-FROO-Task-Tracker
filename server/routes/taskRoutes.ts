@@ -271,7 +271,8 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const actorOffice = req.user?.office || 'ODDG-FROO';
 
     // Ensure assigned_office_code is a valid office_code in offices table
-    let validOfficeCode = assigneeOfficeCode || region || actorOffice || 'ODDG-FROO';
+    const firstRegionCode = region ? String(region).split(',')[0]?.trim() : '';
+    let validOfficeCode = firstRegionCode || assigneeOfficeCode || actorOffice || 'ODDG-FROO';
     const [officeRows]: [any[], any] = await connection.query(
       'SELECT office_code FROM offices WHERE office_code = ? OR office_name = ? LIMIT 1',
       [validOfficeCode, validOfficeCode]
@@ -617,7 +618,7 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
   try {
     const { id } = req.params;
     const user = req.user;
-    const { scheduledDate, location, outcome, remarks, region } = req.body;
+    const { scheduledDate, location, outcome, remarks, region, assignedTo } = req.body;
 
     await connection.beginTransaction();
 
@@ -635,7 +636,8 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
            location = ?,
            outcome = ?,
            remarks = ?,
-           region = ?
+           region = ?,
+           assigned_to_names = ?
        WHERE id = ?`,
       [
         scheduledDate !== undefined ? scheduledDate || null : task.scheduled_date,
@@ -643,6 +645,7 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
         outcome !== undefined ? outcome : task.outcome,
         remarks !== undefined ? remarks : task.remarks,
         region !== undefined ? region : task.region,
+        assignedTo !== undefined ? assignedTo : task.assigned_to_names,
         id,
       ]
     );

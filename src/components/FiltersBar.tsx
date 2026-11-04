@@ -101,7 +101,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </select>
         </div>
 
-        {/* Region Dropdown - strictly scoped to user's authorized jurisdiction */}
+        {/* Region / Office Dropdown - strictly scoped to user's authorized jurisdiction */}
         <div className="w-full sm:w-auto min-w-[150px]">
           <select
             value={selectedRegion}
@@ -109,9 +109,9 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer font-medium"
           >
             {userRole === 'SUPERADMIN' || userRole === 'ADMIN' ? (
-              <option value="All">All Regions (17)</option>
+              <option value="All">Regions/Office</option>
             ) : userRole === 'CLUSTER_DIRECTOR' ? (
-              <option value="All">All Cluster Regions ({availableOffices.length})</option>
+              <option value="All">Regions/Office ({availableOffices.length})</option>
             ) : null}
 
             {availableOffices.map((office) => (
