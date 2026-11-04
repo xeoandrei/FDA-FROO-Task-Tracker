@@ -32,7 +32,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
               <h3 className="text-lg font-bold">FROO Regional Field Offices Directory & Caseload</h3>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Live operational workload across all {FROO_OFFICES.length} regulatory offices and centers.
+              Live operational workload across all 16 Regional Offices and FROO / FDA offices.
             </p>
           </div>
           <button
@@ -138,7 +138,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>All {FROO_OFFICES.length} FROO & FDA Offices covered</span>
+          <span>All 16 Regional Offices & FROO / FDA Offices covered</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer"

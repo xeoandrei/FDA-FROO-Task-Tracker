@@ -169,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <p className="text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
-              Create, assign, monitor and manage operational tasks across the Food and Drug Regulatory Operations Office and Regional Field Offices.
+              Create, assign, monitor and manage operational tasks across FROO.
             </p>
           </div>
 

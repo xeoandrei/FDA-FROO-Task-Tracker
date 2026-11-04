@@ -4,6 +4,13 @@ import { authenticateToken, AuthenticatedRequest } from '../auth';
 
 const router = Router();
 
+// Helper to safely resolve a user ID against the MySQL users table to prevent FK constraint errors
+async function resolveValidUserId(connection: any, candidateId?: string | null): Promise<string | null> {
+  if (!candidateId) return null;
+  const [rows]: [any[], any] = await connection.query('SELECT id FROM users WHERE id = ? LIMIT 1', [candidateId]);
+  return rows.length > 0 ? rows[0].id : null;
+}
+
 // POST /api/tasks/:taskId/dispatches - Create dispatch slip
 router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const connection = await pool.getConnection();
@@ -42,6 +49,7 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
 
     const dispatchId = `DSP-${Date.now()}`;
     const initialStatus = status || 'Pending Regional Supervisor Approval';
+    const validActorId = await resolveValidUserId(connection, user?.id);
 
     await connection.query(
       `INSERT INTO dispatch_slips (
@@ -72,7 +80,7 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
         approvedBy?.name !== undefined ? approvedBy.name : (initialStatus === 'Pending ODDG Approval' ? 'ATTY. FRANKLIN ANTHONY M. TABAQUIN, IV' : ''),
         approvedBy?.title !== undefined ? approvedBy.title : (initialStatus === 'Pending ODDG Approval' ? 'Deputy Director General - Field Regulatory Operations Office' : ''),
         initialStatus,
-        user?.id || null,
+        validActorId,
       ]
     );
 
@@ -101,7 +109,7 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
         `Dispatch Slip Created: ${ctrlNo}`,
         creatorName,
         user?.office || 'ODDG-FROO',
-        user?.id || null,
+        validActorId,
         `Official travel order generated for ${teamLeader}. Initial status: ${initialStatus}.`,
         taskRows[0].status,
       ]
@@ -114,7 +122,7 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           'DISPATCH_CREATED',
-          user.id,
+          validActorId,
           user.email,
           user.role,
           `Generated dispatch slip ${ctrlNo} for task ${taskId}.`,
@@ -173,6 +181,7 @@ router.post('/dispatches/:id/approve', authenticateToken, async (req: Authentica
     }
 
     const ds = rows[0];
+    const validActorId = await resolveValidUserId(connection, user.id);
 
     // Determine next workflow status:
     // Standard Dispatch (Pending Regional Supervisor Approval) -> Approved by RS / CD / Admin / Superadmin
@@ -186,7 +195,7 @@ router.post('/dispatches/:id/approve', authenticateToken, async (req: Authentica
        SET status = ?,
            approved_by_user_id = ?
        WHERE id = ?`,
-      [nextStatus, user.id, id]
+      [nextStatus, validActorId, id]
     );
 
     const approverName = `${user.firstName} ${user.lastName}`;
@@ -199,7 +208,7 @@ router.post('/dispatches/:id/approve', authenticateToken, async (req: Authentica
         `Dispatch Slip Approved: ${ds.ctrl_no}`,
         approverName,
         user.office,
-        user.id,
+        validActorId,
         `Dispatch order approved by ${approverName} (${userRole}). Status updated to ${nextStatus}.`,
       ]
     );
@@ -210,7 +219,7 @@ router.post('/dispatches/:id/approve', authenticateToken, async (req: Authentica
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         'DISPATCH_APPROVED',
-        user.id,
+        validActorId,
         user.email,
         user.role,
         `Approved dispatch slip ${ds.ctrl_no} for task ${ds.task_id}. Updated to ${nextStatus}.`,
@@ -259,6 +268,7 @@ router.post('/dispatches/:id/reject', authenticateToken, async (req: Authenticat
     }
 
     const ds = rows[0];
+    const validActorId = await resolveValidUserId(connection, user.id);
 
     await connection.query(
       `UPDATE dispatch_slips
@@ -277,7 +287,7 @@ router.post('/dispatches/:id/reject', authenticateToken, async (req: Authenticat
         `Dispatch Slip Rejected: ${ds.ctrl_no}`,
         reviewerName,
         user.office,
-        user.id,
+        validActorId,
         `Dispatch slip rejected: ${rejectionReason || 'Requires revision'}.`,
       ]
     );
@@ -287,7 +297,7 @@ router.post('/dispatches/:id/reject', authenticateToken, async (req: Authenticat
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         'DISPATCH_REJECTED',
-        user.id,
+        validActorId,
         user.email,
         user.role,
         `Rejected dispatch slip ${ds.ctrl_no} (Reason: ${rejectionReason || 'Requires revision'}).`,

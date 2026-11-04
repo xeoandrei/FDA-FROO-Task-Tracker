@@ -380,6 +380,13 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// Helper to safely resolve a user ID against the MySQL users table to prevent FK constraint errors
+async function resolveValidUserId(connection: any, candidateId?: string | null): Promise<string | null> {
+  if (!candidateId) return null;
+  const [rows]: [any[], any] = await connection.query('SELECT id FROM users WHERE id = ? LIMIT 1', [candidateId]);
+  return rows.length > 0 ? rows[0].id : null;
+}
+
 // Helper to match comma-separated task regions with user office
 function doesTaskRegionMatchOffice(taskRegionRaw: string, userOfficeRaw: string): boolean {
   const normalize = (val: string) => {
@@ -460,6 +467,7 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
 
     const actorName = `${user.firstName} ${user.lastName}`;
     const actorOffice = user.office;
+    const validActorId = await resolveValidUserId(connection, user.id);
 
     // Update task
     await connection.query(
@@ -468,7 +476,7 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
            received_at = NOW(),
            received_by_user_id = ?
        WHERE id = ?`,
-      [user.id, id]
+      [validActorId, id]
     );
 
     // Record activity log
@@ -480,8 +488,8 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
         'Task received and accepted into In-Progress execution.',
         actorName,
         actorOffice,
-        user.id,
-        `Official receipt recorded by ${actorName} (${user.role}, ${actorOffice}). Field regulatory operation initiated.`,
+        validActorId,
+        `Official receipt recorded by ${actorName} (${user.role}, ${actorOffice}). Task execution initiated.`,
       ]
     );
 
@@ -491,7 +499,7 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         'TASK_RECEIVED',
-        user.id,
+        validActorId,
         user.email,
         user.role,
         `Task "${task.task_title}" (DTN: ${task.dtn}) received and accepted by ${actorName}. Status updated to In Progress.`,
@@ -535,6 +543,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
 
     const task = rows[0];
     const actorName = `${user.firstName} ${user.lastName}`;
+    const validActorId = await resolveValidUserId(connection, user.id);
 
     await connection.query(
       `UPDATE tasks
@@ -544,7 +553,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
            completed_at = NOW(),
            completed_by_user_id = ?
        WHERE id = ?`,
-      [outcome || 'Compliance Verified', remarks || null, user.id, id]
+      [outcome || 'Compliance Verified', remarks || null, validActorId, id]
     );
 
     await connection.query(
@@ -555,7 +564,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
         `Task concluded: ${outcome || 'Compliance Verified'}`,
         actorName,
         user.office,
-        user.id,
+        validActorId,
         remarks || 'Task marked completed by operational officer.',
       ]
     );
@@ -565,7 +574,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         'TASK_COMPLETED',
-        user.id,
+        validActorId,
         user.email,
         user.role,
         `Task "${task.task_title}" completed with outcome: ${outcome || 'Compliance Verified'}.`,
@@ -621,6 +630,7 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
     }
 
     const actorName = `${user.firstName} ${user.lastName}`;
+    const validActorId = await resolveValidUserId(connection, user.id);
 
     if (newStatus && newStatus !== task.status) {
       await connection.query('UPDATE tasks SET status = ? WHERE id = ?', [newStatus, id]);
@@ -631,10 +641,10 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        action || 'Field Progress Update',
+        action || 'Task Progress Update',
         actorName,
         user.office,
-        user.id,
+        validActorId,
         notes || '',
         newStatus || task.status,
       ]
@@ -693,6 +703,7 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
 
     const actorName = user ? `${user.firstName} ${user.lastName}` : 'Authorized Officer';
     const actorOffice = user?.office || task.region;
+    const validActorId = await resolveValidUserId(connection, user?.id);
 
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
@@ -701,7 +712,7 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
         id,
         actorName,
         actorOffice,
-        user?.id || null,
+        validActorId,
         `Updated outcome to "${outcome || task.outcome}" & location to "${location || task.location}"`,
         task.status,
       ]

@@ -194,7 +194,7 @@ export default function App() {
       return {
         allowedRegions: FROO_OFFICES.map((o) => o.code),
         defaultRegionFilter: 'All',
-        scopeLabel: 'National Scope (ODDG-FROO & All Regional/Central Offices)',
+        scopeLabel: 'National Scope (ODDG-FROO & All 16 Regional Offices)',
       };
     }
 
@@ -592,7 +592,7 @@ export default function App() {
       actor: actorName,
       actorOffice: actorOffice,
       date: formattedNow,
-      notes: `Official receipt recorded by ${actorName} (${actorPosition}, ${actorOffice}). Field regulatory operation initiated.`,
+      notes: `Official receipt recorded by ${actorName} (${actorPosition}, ${actorOffice}). Task execution initiated.`,
       newStatus: 'In Progress',
     };
 

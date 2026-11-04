@@ -216,7 +216,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
         <div className="text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Role-Based Access Control • 5 Clusters • 17 Regional Offices</span>
+            <span>Role-Based Access Control • 5 Clusters • 16 Regional Offices</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-snug sm:leading-tight">

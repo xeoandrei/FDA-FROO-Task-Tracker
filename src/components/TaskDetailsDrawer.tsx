@@ -121,7 +121,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       actor: actorName,
       actorOffice: actorOffice,
       date: formattedNow,
-      notes: `Official receipt recorded by ${actorName}. Field regulatory operation initiated.`,
+      notes: `Official receipt recorded by ${actorName}. Task execution initiated.`,
       newStatus: 'In Progress',
     };
 
@@ -165,7 +165,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       actor: actorName,
       actorOffice: actorOffice,
       date: formattedNow,
-      notes: completionRemarks || 'Regulatory mission concluded with documented findings.',
+      notes: completionRemarks || 'Task concluded and marked as completed.',
       newStatus: 'Completed',
     };
 
@@ -615,10 +615,10 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
-                      Field Operation In Progress
+                      Task Execution In Progress
                     </h4>
                     <p className="text-[11.5px] text-amber-900 mt-0.5 leading-snug">
-                      Active execution underway. Once regulatory field inspection or PMS has concluded, mark as completed.
+                      Task is currently being processed. Once all assigned duties and requirements have been fulfilled, mark as completed.
                     </p>
                   </div>
                 </div>
@@ -1200,13 +1200,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Final Findings & Field Remarks
+                  Final Remarks & Output Summary
                 </label>
                 <textarea
                   rows={3}
                   value={completionRemarks}
                   onChange={(e) => setCompletionRemarks(e.target.value)}
-                  placeholder="Summarize the inspection findings, samples collected, violations noted, or resolution..."
+                  placeholder="Summarize the actions taken, output, findings, or resolution..."
                   className="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:border-[#056839]"
                 />
               </div>
