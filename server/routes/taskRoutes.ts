@@ -253,6 +253,18 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     let targetUserId = assignedToUserId || null;
     let assigneeOfficeCode: string | null = null;
 
+    if (targetUserId) {
+      const [uCheck]: [any[], any] = await connection.query(
+        'SELECT id, office_code FROM users WHERE id = ? LIMIT 1',
+        [targetUserId]
+      );
+      if (uCheck.length === 0) {
+        targetUserId = null;
+      } else {
+        assigneeOfficeCode = uCheck[0].office_code;
+      }
+    }
+
     if (!targetUserId && firstAssigneeName) {
       const [uRows]: [any[], any] = await connection.query(
         `SELECT id, office_code FROM users
@@ -266,7 +278,17 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       }
     }
 
-    const actorId = req.user?.id || null;
+    let actorId = req.user?.id || null;
+    if (actorId) {
+      const [actorRows]: [any[], any] = await connection.query(
+        'SELECT id FROM users WHERE id = ? LIMIT 1',
+        [actorId]
+      );
+      if (actorRows.length === 0) {
+        actorId = null;
+      }
+    }
+
     const actorName = req.user ? `${req.user.firstName} ${req.user.lastName}` : 'ODDG-FROO Administrator';
     const actorOffice = req.user?.office || 'ODDG-FROO';
 
@@ -290,7 +312,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         id, dtn, task_title, category, origin, origin_details,
         assigned_to_user_id, assigned_to_names, assigned_office_code, region, due_date,
         scheduled_date, location, description, outcome, status, priority, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'Open', ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'Open', ?, ?)`,
       [
         taskId,
         finalDtn,
@@ -332,10 +354,10 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           'TASK_CREATED',
-          req.user.id,
+          actorId,
           req.user.email,
           req.user.role,
-          `Operational task "${taskTitle}" (DTN: ${cleanDtn}) created in ${region}.`,
+          `Operational task "${taskTitle}" (DTN: ${cleanDtn}) created in ${resolvedRegion}.`,
           taskId,
           taskTitle,
         ]
@@ -357,6 +379,24 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     connection.release();
   }
 });
+
+// Helper to match comma-separated task regions with user office
+function doesTaskRegionMatchOffice(taskRegionRaw: string, userOfficeRaw: string): boolean {
+  const normalize = (val: string) => {
+    const v = val.toLowerCase().trim();
+    if (v === 'region ncr' || v === 'ncr' || v.includes('field office - ncr')) return 'ncr';
+    if (v === 'region car' || v === 'car' || v.includes('cordillera')) return 'car';
+    if (v === 'region 12 / barmm' || v === 'region 12' || v === 'barmm') return 'region 12 / barmm';
+    if (v === 'region 13' || v === 'caraga' || v.includes('caraga')) return 'region 13';
+    return v;
+  };
+  const userNorm = normalize(userOfficeRaw || '');
+  const parts = (taskRegionRaw || '')
+    .split(',')
+    .map((p) => normalize(p))
+    .filter(Boolean);
+  return parts.some((p) => p === userNorm || p.includes(userNorm) || userNorm.includes(p));
+}
 
 // POST /api/tasks/:id/receive - Receive and Accept Task
 router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -389,25 +429,26 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
 
     // Role and regional authorization validation
     const userRole = (user.role || '').toUpperCase();
-    const userOffice = (user.office || '').toLowerCase();
-    const taskRegion = (task.region || '').toLowerCase();
+    const userOffice = user.office || '';
+    const taskRegion = task.region || '';
+    const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase().trim();
+    const assignedNames = (task.assigned_to_names || '').toLowerCase();
+    const isDirectAssignee =
+      task.assigned_to_user_id === user.id ||
+      assignedNames
+        .split(',')
+        .map((s: string) => s.trim())
+        .includes(userFullName) ||
+      assignedNames.includes(userFullName);
 
     let authorized = false;
-    if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') {
+    if (userRole === 'SUPERADMIN' || userRole === 'ADMIN' || userRole === 'CLUSTER_DIRECTOR') {
       authorized = true;
-    } else if (userRole === 'CLUSTER_DIRECTOR') {
-      authorized = true; // Cluster Directors have cluster-wide authority
     } else if (userRole === 'REGIONAL_SUPERVISOR') {
-      authorized = userOffice.includes(taskRegion) || taskRegion.includes(userOffice);
+      authorized = isDirectAssignee || doesTaskRegionMatchOffice(taskRegion, userOffice);
     } else {
       // STANDARD staff: must be assigned to them (by ID or multi-select name) or in same office
-      const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase();
-      const assignedNames = (task.assigned_to_names || '').toLowerCase();
-      authorized =
-        task.assigned_to_user_id === user.id ||
-        assignedNames.includes(userFullName) ||
-        userOffice.includes(taskRegion) ||
-        taskRegion.includes(userOffice);
+      authorized = isDirectAssignee || doesTaskRegionMatchOffice(taskRegion, userOffice);
     }
 
     if (!authorized) {

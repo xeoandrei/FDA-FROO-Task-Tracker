@@ -143,7 +143,10 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     const sorted = [...fallbackStore.offices].sort((a, b) => a.office_name.localeCompare(b.office_name));
     return [sorted, []];
   }
-  if (normalizedSql.includes('SELECT office_code, cluster_code FROM offices WHERE office_code = ? OR office_name = ?')) {
+  if (
+    normalizedSql.includes('SELECT office_code, cluster_code FROM offices WHERE office_code = ? OR office_name = ?') ||
+    normalizedSql.includes('SELECT office_code FROM offices WHERE office_code = ? OR office_name = ?')
+  ) {
     const val = params[0];
     const found = fallbackStore.offices.find(
       (o) => o.office_code.toLowerCase() === String(val).toLowerCase() || o.office_name.toLowerCase() === String(val).toLowerCase()
@@ -174,6 +177,20 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     const targetUsername = String(params[0] || '').toLowerCase();
     const found = fallbackStore.users.find((u) => (u.username || '').toLowerCase() === targetUsername);
     return [found ? [{ id: found.id }] : [], []];
+  }
+
+  // 5b. USERS: Assignee lookup by full name, email, or id
+  if (normalizedSql.includes("LOWER(CONCAT(first_name, ' ', last_name)) = ?")) {
+    const targetName = String(params[0] || '').toLowerCase().trim();
+    const targetEmail = String(params[1] || targetName).toLowerCase().trim();
+    const targetId = String(params[2] || targetName).trim();
+    const found = fallbackStore.users.find(
+      (u) =>
+        `${u.first_name} ${u.last_name}`.toLowerCase().trim() === targetName ||
+        u.email.toLowerCase().trim() === targetEmail ||
+        u.id === targetId
+    );
+    return [found ? [found] : [], []];
   }
 
   // 6. USERS: Login lookup (email OR username)

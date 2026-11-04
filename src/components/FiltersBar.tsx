@@ -108,11 +108,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             onChange={(e) => onRegionChange(e.target.value)}
             className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer font-medium"
           >
-            {userRole === 'SUPERADMIN' || userRole === 'ADMIN' ? (
-              <option value="All">Regions/Office</option>
-            ) : userRole === 'CLUSTER_DIRECTOR' ? (
-              <option value="All">Regions/Office ({availableOffices.length})</option>
-            ) : null}
+            <option value="All">Regions/Office</option>
 
             {availableOffices.map((office) => (
               <option key={office.id} value={office.code}>

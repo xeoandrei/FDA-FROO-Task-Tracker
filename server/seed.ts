@@ -112,7 +112,11 @@ export async function runAutoSeed(): Promise<void> {
       }
       try {
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN dtn VARCHAR(50) NOT NULL DEFAULT 'N/A'`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN category VARCHAR(100) NOT NULL`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN origin VARCHAR(100) NOT NULL`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN assigned_to_user_id CHAR(36) NULL`);
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN region VARCHAR(255) NOT NULL`);
+        await connection.query(`ALTER TABLE tasks MODIFY COLUMN scheduled_date DATE NULL`);
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN priority VARCHAR(50) NOT NULL DEFAULT 'Normal'`);
       } catch {
         // Ignore if already modified

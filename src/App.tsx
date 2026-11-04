@@ -38,12 +38,14 @@ import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
 import { ReceiveTaskModal } from './components/ReceiveTaskModal';
 import {
   isUserAssignedToTask,
+  isUserCreatedTask,
   isTaskRequiringUserAction,
   validateCanReceiveTask,
+  doesRegionMatch,
 } from './utils/taskAuthorization';
 import { ActivityItem } from './types/task';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { api, setAuthToken } from './api/client';
+import { api, setAuthToken, getAuthToken } from './api/client';
 
 export default function App() {
   // Current authenticated user session
@@ -76,6 +78,63 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Helper to synchronize local and backend tasks so created tasks never disappear on logout/login
+  const syncTasksFromBackend = async (remoteTasks: Task[]): Promise<Task[]> => {
+    const localTasks = getStoredTasks();
+    const unsyncedLocal = localTasks.filter(
+      (lt) =>
+        !remoteTasks.some(
+          (rt) =>
+            rt.id === lt.id ||
+            (rt.taskTitle.trim().toLowerCase() === lt.taskTitle.trim().toLowerCase() &&
+              rt.assignedTo.trim().toLowerCase() === lt.assignedTo.trim().toLowerCase() &&
+              rt.dueDate === lt.dueDate)
+        )
+    );
+
+    const syncedExtras: Task[] = [];
+    if (unsyncedLocal.length > 0 && getAuthToken()) {
+      for (const lt of unsyncedLocal) {
+        try {
+          const created = await api.createTask({
+            taskTitle: lt.taskTitle,
+            category: lt.category,
+            origin: lt.origin,
+            originDetails: lt.originDetails,
+            assignedTo: lt.assignedTo,
+            region: lt.region,
+            dueDate: lt.dueDate,
+            scheduledDate: lt.scheduledDate,
+            location: lt.location,
+            description: lt.description,
+            priority: lt.priority,
+            dtn: lt.dtn,
+          });
+          if (created) {
+            syncedExtras.push(created);
+          } else {
+            syncedExtras.push(lt);
+          }
+        } catch {
+          syncedExtras.push(lt);
+        }
+      }
+    } else if (unsyncedLocal.length > 0) {
+      syncedExtras.push(...unsyncedLocal);
+    }
+
+    const combined = [...syncedExtras, ...remoteTasks];
+    const seenIds = new Set<string>();
+    const deduplicated: Task[] = [];
+    for (const item of combined) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        deduplicated.push(item);
+      }
+    }
+    return deduplicated;
+  };
+
   // Sync with Express backend & MySQL database when available
   useEffect(() => {
     let isMounted = true;
@@ -96,8 +155,11 @@ export default function App() {
           }
 
           if (isMounted && tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value)) {
-            setTasks(tasksRes.value);
-            saveStoredTasks(tasksRes.value);
+            const merged = await syncTasksFromBackend(tasksRes.value);
+            if (isMounted) {
+              setTasks(merged);
+              saveStoredTasks(merged);
+            }
           }
         } else {
           if (isMounted) setDbStatus('offline');
@@ -132,7 +194,7 @@ export default function App() {
       return {
         allowedRegions: FROO_OFFICES.map((o) => o.code),
         defaultRegionFilter: 'All',
-        scopeLabel: 'National Scope (ODDG-FROO & All 17 Regional Offices)',
+        scopeLabel: 'National Scope (ODDG-FROO & All Regional/Central Offices)',
       };
     }
 
@@ -155,8 +217,8 @@ export default function App() {
     const userRegion = currentUser.office;
     return {
       allowedRegions: [userRegion],
-      defaultRegionFilter: userRegion,
-      scopeLabel: `${userRegion} Field Jurisdiction Only`,
+      defaultRegionFilter: 'All',
+      scopeLabel: `${userRegion} Field Jurisdiction`,
     };
   }, [currentUser]);
 
@@ -179,7 +241,7 @@ export default function App() {
     setActiveView('MY_TASKS');
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
 
-    // If backend is online, fetch fresh task and user list with the authenticated token
+    // Fetch fresh task and user list with the authenticated token
     try {
       const [usersRes, tasksRes] = await Promise.allSettled([
         api.getUsers(),
@@ -190,8 +252,10 @@ export default function App() {
         setAllStaffUsers(getStoredUsers());
       }
       if (tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value)) {
-        setTasks(tasksRes.value);
-        saveStoredTasks(tasksRes.value);
+        setDbStatus('online');
+        const merged = await syncTasksFromBackend(tasksRes.value);
+        setTasks(merged);
+        saveStoredTasks(merged);
       }
     } catch {
       // Keep existing tasks and users
@@ -249,24 +313,25 @@ export default function App() {
     }
   };
 
-  // 1. Jurisdiction base tasks (filtered by user's authorized role and regions)
+  // 1. Jurisdiction base tasks (filtered by user's authorized role, direct assignment, creation, or regions)
   const jurisdictionTasks = useMemo(() => {
     return tasks.filter((task) => {
       if (!currentUser) return true;
       if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') return true;
-      return allowedRegions.some(
-        (ar) =>
-          task.region.toLowerCase().includes(ar.toLowerCase()) ||
-          ar.toLowerCase().includes(task.region.toLowerCase())
-      );
+      if (isUserAssignedToTask(task, currentUser) || isUserCreatedTask(task, currentUser)) return true;
+      return allowedRegions.some((ar) => doesRegionMatch(task.region, ar));
     });
   }, [tasks, currentUser, allowedRegions]);
 
-  // View 1: My Tasks (Tasks assigned to or requiring action from the current user)
+  // View 1: My Tasks (Tasks assigned to, created by, or requiring action from the current user)
   const myTasks = useMemo(() => {
     if (!currentUser) return jurisdictionTasks;
     return jurisdictionTasks.filter((task) => {
-      return isUserAssignedToTask(task, currentUser) || isTaskRequiringUserAction(task, currentUser);
+      return (
+        isUserAssignedToTask(task, currentUser) ||
+        isUserCreatedTask(task, currentUser) ||
+        isTaskRequiringUserAction(task, currentUser)
+      );
     });
   }, [jurisdictionTasks, currentUser]);
 
@@ -277,29 +342,24 @@ export default function App() {
       // Must be awaiting receipt
       if (task.status !== 'Open' || task.receivedAt) return false;
 
-      // For standard staff: must be assigned to them or in their regional office
+      // Direct assignee can always see & receive
+      if (isUserAssignedToTask(task, currentUser)) return true;
+
+      // For standard staff: in their regional/central office
       if (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE') {
-        return (
-          isUserAssignedToTask(task, currentUser) ||
-          currentUser.office.toLowerCase().includes(task.region.toLowerCase()) ||
-          task.region.toLowerCase().includes(currentUser.office.toLowerCase())
-        );
+        return doesRegionMatch(task.region, currentUser.office);
       }
 
       // For regional supervisor: tasks in their regional office
       if (currentUser.role === 'REGIONAL_SUPERVISOR') {
-        return (
-          currentUser.office.toLowerCase().includes(task.region.toLowerCase()) ||
-          task.region.toLowerCase().includes(currentUser.office.toLowerCase())
-        );
+        return doesRegionMatch(task.region, currentUser.office);
       }
 
       // For Cluster Director: tasks in cluster regions
       if (currentUser.role === 'CLUSTER_DIRECTOR') {
-        return allowedRegions.some(
-          (ar) =>
-            task.region.toLowerCase().includes(ar.toLowerCase()) ||
-            ar.toLowerCase().includes(task.region.toLowerCase())
+        return (
+          doesRegionMatch(task.region, currentUser.office) ||
+          allowedRegions.some((ar) => doesRegionMatch(task.region, ar))
         );
       }
 
@@ -329,10 +389,7 @@ export default function App() {
     return activeViewTasks.filter((task) => {
       // 1. Region Dropdown Filter
       if (selectedRegion !== 'All') {
-        const match =
-          task.region.toLowerCase().includes(selectedRegion.toLowerCase()) ||
-          selectedRegion.toLowerCase().includes(task.region.toLowerCase());
-        if (!match) return false;
+        if (!doesRegionMatch(task.region, selectedRegion)) return false;
       }
 
       // 2. Search Query
@@ -400,34 +457,41 @@ export default function App() {
 
   // Task creation
   const handleCreateTask = async (newTask: Task) => {
-    if (dbStatus === 'online') {
-      try {
-        const created = await api.createTask({
-          taskTitle: newTask.taskTitle,
-          category: newTask.category,
-          origin: newTask.origin,
-          originDetails: newTask.originDetails,
-          assignedTo: newTask.assignedTo,
-          region: newTask.region,
-          dueDate: newTask.dueDate,
-          scheduledDate: newTask.scheduledDate,
-          location: newTask.location,
-          description: newTask.description,
-          priority: newTask.priority,
-          dtn: newTask.dtn,
-        });
+    try {
+      const created = await api.createTask({
+        taskTitle: newTask.taskTitle,
+        category: newTask.category,
+        origin: newTask.origin,
+        originDetails: newTask.originDetails,
+        assignedTo: newTask.assignedTo,
+        region: newTask.region,
+        dueDate: newTask.dueDate,
+        scheduledDate: newTask.scheduledDate,
+        location: newTask.location,
+        description: newTask.description,
+        priority: newTask.priority,
+        dtn: newTask.dtn,
+      });
 
-        if (created) {
-          setTasks((prev) => [created, ...prev]);
-          showToast(`Task "${created.taskTitle}" saved to MySQL and assigned to ${created.assignedTo}.`);
-          return;
-        }
-      } catch (err: any) {
-        console.warn('API task creation note:', err.message);
+      if (created) {
+        setDbStatus('online');
+        setTasks((prev) => {
+          const next = [created, ...prev.filter((t) => t.id !== created.id)];
+          saveStoredTasks(next);
+          return next;
+        });
+        showToast(`Task "${created.taskTitle}" saved and assigned to ${created.assignedTo}.`);
+        return;
       }
+    } catch (err: any) {
+      console.warn('API task creation note:', err.message);
     }
 
-    setTasks((prev) => [newTask, ...prev]);
+    setTasks((prev) => {
+      const next = [newTask, ...prev.filter((t) => t.id !== newTask.id)];
+      saveStoredTasks(next);
+      return next;
+    });
     showToast(`Task "${newTask.taskTitle}" created and assigned to ${newTask.assignedTo}.`);
 
     if (currentUser) {
@@ -442,9 +506,11 @@ export default function App() {
 
   // Update existing task
   const handleUpdateTask = (updatedTask: Task) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-    );
+    setTasks((prev) => {
+      const next = prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      saveStoredTasks(next);
+      return next;
+    });
     if (selectedTask?.id === updatedTask.id) {
       setSelectedTask(updatedTask);
     }
@@ -455,15 +521,17 @@ export default function App() {
   const handleDeleteTask = async (taskId: string) => {
     if (confirm('Are you sure you want to delete this task?')) {
       const target = tasks.find((t) => t.id === taskId);
-      if (dbStatus === 'online') {
-        try {
-          await api.deleteTask(taskId);
-        } catch (err: any) {
-          console.warn('Backend delete task notice:', err.message);
-        }
+      try {
+        await api.deleteTask(taskId);
+      } catch (err: any) {
+        console.warn('Backend delete task notice:', err.message);
       }
 
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTasks((prev) => {
+        const next = prev.filter((t) => t.id !== taskId);
+        saveStoredTasks(next);
+        return next;
+      });
       if (selectedTask?.id === taskId) {
         setSelectedTask(null);
       }
