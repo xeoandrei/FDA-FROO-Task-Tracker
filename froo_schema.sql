@@ -261,7 +261,10 @@ CREATE TABLE IF NOT EXISTS `system_audit_logs` (
 INSERT IGNORE INTO `clusters` (`cluster_code`, `cluster_name`, `description`) VALUES
 ('NLC', 'North Luzon Cluster', 'Ilocos Region, Cagayan Valley, Central Luzon, CAR'),
 ('SLC', 'South Luzon Cluster', 'CALABARZON, MIMAROPA, Bicol Region, NCR'),
+('VC', 'Visayas Cluster', 'Western, Central, and Eastern Visayas'),
 ('VBC', 'Visayas Cluster', 'Western, Central, and Eastern Visayas'),
+('MEC', 'Mindanao East Cluster', 'Northern Mindanao (Region 10), Davao Region (Region 11), Caraga (Region 13)'),
+('MWC', 'Mindanao West Cluster', 'Zamboanga Peninsula (Region 9), SOCCSKSARGEN (Region 12) / BARMM'),
 ('MOC', 'Mindanao Cluster', 'Zamboanga Peninsula, Northern Mindanao, Davao, SOCCSKSARGEN, Caraga, BARMM');
 
 INSERT IGNORE INTO `roles` (`role_code`, `role_name`, `hierarchy_level`, `can_approve_dispatch`, `description`) VALUES
@@ -275,11 +278,16 @@ INSERT IGNORE INTO `offices` (`office_code`, `office_name`, `cluster_code`, `off
 ('ODDG-FROO', 'Office of the Deputy Director General - FROO', NULL, 'CENTRAL'),
 ('NLC', 'North Luzon Cluster Office (NLC)', 'NLC', 'REGIONAL'),
 ('SLC', 'South Luzon Cluster Office (SLC)', 'SLC', 'REGIONAL'),
+('VC', 'Visayas Cluster Office (VC)', 'VC', 'REGIONAL'),
 ('VBC', 'Visayas Cluster Office (VBC)', 'VBC', 'REGIONAL'),
+('MEC', 'Mindanao East Cluster Office (MEC)', 'MEC', 'REGIONAL'),
+('MWC', 'Mindanao West Cluster Office (MWC)', 'MWC', 'REGIONAL'),
 ('MOC', 'Mindanao Cluster Office (MOC)', 'MOC', 'REGIONAL'),
 ('North Luzon Cluster (NLC)', 'North Luzon Cluster (NLC)', 'NLC', 'REGIONAL'),
 ('South Luzon Cluster (SLC)', 'South Luzon Cluster (SLC)', 'SLC', 'REGIONAL'),
-('Visayas Cluster (VC)', 'Visayas Cluster (VC)', 'VBC', 'REGIONAL'),
+('Visayas Cluster (VC)', 'Visayas Cluster (VC)', 'VC', 'REGIONAL'),
+('Mindanao East Cluster (MEC)', 'Mindanao East Cluster (MEC)', 'MEC', 'REGIONAL'),
+('Mindanao West Cluster (MWC)', 'Mindanao West Cluster (MWC)', 'MWC', 'REGIONAL'),
 ('Mindanao Cluster (MOC)', 'Mindanao Cluster (MOC)', 'MOC', 'REGIONAL'),
 ('Region NCR', 'Regional Field Office - NCR', 'SLC', 'REGIONAL'),
 ('NCR', 'Region NCR', 'SLC', 'REGIONAL'),

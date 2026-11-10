@@ -58,13 +58,20 @@ router.post('/', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (
     const passwordHash = await hashPassword(password);
     const uname = username || email.split('@')[0];
 
-    // Resolve office and cluster from DB
-    let resolvedOfficeCode = office;
-    let resolvedClusterCode = cluster || null;
+    // Resolve office and cluster from DB (and self-heal missing cluster/office records)
+    let resolvedOfficeCode = String(office).trim();
+    let resolvedClusterCode = cluster ? String(cluster).trim() : null;
+
+    if (resolvedClusterCode) {
+      await pool.query(
+        `INSERT IGNORE INTO clusters (cluster_code, cluster_name, description) VALUES (?, ?, ?)`,
+        [resolvedClusterCode, resolvedOfficeCode, `FROO Cluster (${resolvedClusterCode})`]
+      );
+    }
 
     const [officeRows]: [any[], any] = await pool.query(
       `SELECT office_code, cluster_code FROM offices WHERE office_code = ? OR office_name = ? LIMIT 1`,
-      [office, office]
+      [resolvedOfficeCode, resolvedOfficeCode]
     );
 
     if (officeRows.length > 0) {
@@ -72,9 +79,16 @@ router.post('/', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (
       if (!resolvedClusterCode) {
         resolvedClusterCode = officeRows[0].cluster_code || null;
       }
-    } else if (office.toUpperCase() === 'NCR') {
+    } else if (resolvedOfficeCode.toUpperCase() === 'NCR') {
       resolvedOfficeCode = 'Region NCR';
       resolvedClusterCode = 'SLC';
+    } else {
+      // Ensure the office exists in the offices table so fk_users_office never fails
+      const officeType = resolvedOfficeCode.toUpperCase().includes('ODDG') ? 'CENTRAL' : 'REGIONAL';
+      await pool.query(
+        `INSERT IGNORE INTO offices (office_code, office_name, cluster_code, office_type) VALUES (?, ?, ?, ?)`,
+        [resolvedOfficeCode, resolvedOfficeCode, resolvedClusterCode, officeType]
+      );
     }
 
     await pool.query(
