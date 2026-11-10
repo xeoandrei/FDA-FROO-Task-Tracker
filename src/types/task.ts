@@ -26,6 +26,7 @@ export interface DispatchSlip {
   dispatchDate: string;
   establishments: string[];
   locations: string[];
+  targetDates?: string[];
   purposes: {
     inspection: boolean;
     postMarketSurveillance: boolean;

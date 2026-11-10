@@ -138,7 +138,7 @@ export async function runAutoSeed(): Promise<void> {
           id VARCHAR(40) NOT NULL,
           task_id VARCHAR(40) NOT NULL,
           ctrl_no VARCHAR(50) NOT NULL,
-          dispatch_date DATE NOT NULL,
+          dispatch_date VARCHAR(255) NOT NULL,
           purpose_inspection TINYINT(1) NOT NULL DEFAULT 0,
           purpose_pms TINYINT(1) NOT NULL DEFAULT 0,
           purpose_meeting TINYINT(1) NOT NULL DEFAULT 0,
@@ -176,6 +176,7 @@ export async function runAutoSeed(): Promise<void> {
           sequence_no INT NOT NULL DEFAULT 1,
           establishment_name VARCHAR(255) NOT NULL,
           location_address VARCHAR(255) NOT NULL,
+          target_date VARCHAR(150) NULL,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (id),
           CONSTRAINT fk_dest_dispatch_slip FOREIGN KEY (dispatch_slip_id) REFERENCES dispatch_slips (id) ON UPDATE CASCADE ON DELETE CASCADE
@@ -310,6 +311,22 @@ export async function runAutoSeed(): Promise<void> {
         await connection.query(`ALTER TABLE tasks MODIFY COLUMN priority VARCHAR(50) NOT NULL DEFAULT 'Normal'`);
       } catch {
         // Ignore if already modified
+      }
+      try {
+        await connection.query(`ALTER TABLE dispatch_slips MODIFY COLUMN dispatch_date VARCHAR(255) NOT NULL`);
+      } catch {
+        // Ignore if already modified
+      }
+      try {
+        const [destCols]: [any[], any] = await connection.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dispatch_slip_destinations'`
+        );
+        const destColSet = new Set(destCols.map((c: any) => String(c.COLUMN_NAME || c.column_name || '')));
+        if (destColSet.size > 0 && !destColSet.has('target_date')) {
+          await connection.query(`ALTER TABLE dispatch_slip_destinations ADD COLUMN target_date VARCHAR(150) NULL AFTER location_address`);
+        }
+      } catch {
+        // Ignore if already present
       }
     }
 

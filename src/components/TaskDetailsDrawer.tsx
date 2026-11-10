@@ -61,14 +61,6 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   allTasks = [],
   onPromptReceiveTask,
 }) => {
-  if (!isOpen || !task) return null;
-
-  // Active user name and office fallback
-  const actorName = currentUser
-    ? `${currentUser.firstName} ${currentUser.lastName}`
-    : currentPersona?.name || 'Authorized Officer';
-  const actorOffice = currentUser?.office || currentPersona?.officeName || task.region;
-
   // Dispatch state
   const [isCreateDispatchOpen, setIsCreateDispatchOpen] = useState(false);
   const [previewDispatchSlip, setPreviewDispatchSlip] = useState<DispatchSlip | null>(null);
@@ -86,13 +78,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
   // Edit fields mode
   const [isEditingDetails, setIsEditingDetails] = useState(false);
-  const [editDtn, setEditDtn] = useState(task.dtn || '');
-  const [editScheduledDate, setEditScheduledDate] = useState(task.scheduledDate || '');
-  const [editLocation, setEditLocation] = useState(task.location || '');
-  const [editOutcome, setEditOutcome] = useState(task.outcome || 'Scheduled');
-  const [editRemarks, setEditRemarks] = useState(task.remarks || '');
-  const [editAssignedTo, setEditAssignedTo] = useState(task.assignedTo);
-  const [editRegion, setEditRegion] = useState(task.region);
+  const [editDtn, setEditDtn] = useState(task?.dtn || '');
+  const [editScheduledDate, setEditScheduledDate] = useState(task?.scheduledDate || '');
+  const [editLocation, setEditLocation] = useState(task?.location || '');
+  const [editOutcome, setEditOutcome] = useState(task?.outcome || 'Scheduled');
+  const [editRemarks, setEditRemarks] = useState(task?.remarks || '');
+  const [editAssignedTo, setEditAssignedTo] = useState(task?.assignedTo || '');
+  const [editRegion, setEditRegion] = useState(task?.region || '');
 
   useEffect(() => {
     if (task) {
@@ -105,6 +97,14 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       setEditRegion(task.region);
     }
   }, [task]);
+
+  if (!isOpen || !task) return null;
+
+  // Active user name and office fallback
+  const actorName = currentUser
+    ? `${currentUser.firstName} ${currentUser.lastName}`
+    : currentPersona?.name || 'Authorized Officer';
+  const actorOffice = currentUser?.office || currentPersona?.officeName || task.region;
 
   // Receive Task handler
   const handleReceiveTask = async () => {

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from 'react';
-import { X, Download, Printer, Check, Edit, AlertCircle, FileText } from 'lucide-react';
+import { X, Download, Check, Edit, AlertCircle } from 'lucide-react';
 import { DispatchSlip, Task } from '../types/task';
-import { exportDispatchSlipToPdf, printDispatchSlip } from '../utils/pdfExport';
+import { exportDispatchSlipToPdf } from '../utils/pdfExport';
 import { FDA_LETTERHEAD_DATA_URI } from '../data/letterheadBase64';
 
 interface DispatchSlipPreviewModalProps {
@@ -28,7 +28,7 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
   const {
     establishments,
     locations,
-    dtn,
+    targetDates,
     dispatchDate,
     teamLeader,
     teamMembers,
@@ -44,7 +44,7 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
       return {
         establishments: [] as string[],
         locations: [] as string[],
-        dtn: task?.dtn,
+        targetDates: [] as string[],
         dispatchDate: '',
         teamLeader: '',
         teamMembers: '',
@@ -80,11 +80,19 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
         ? [`Regional Field Office - ${task.region}`]
         : ['—'];
 
+    const resolvedDispatchDate =
+      slip.dispatchDate || task?.scheduledDate || task?.dueDate || '________________________';
+
+    const tgtDates =
+      slip.targetDates && slip.targetDates.length > 0
+        ? slip.targetDates
+        : estList.map(() => resolvedDispatchDate);
+
     return {
       establishments: estList,
       locations: locList,
-      dtn: task?.dtn,
-      dispatchDate: slip.dispatchDate || task?.scheduledDate || task?.dueDate || '________________________',
+      targetDates: tgtDates,
+      dispatchDate: resolvedDispatchDate,
       teamLeader: slip.teamLeader || task?.assignedTo || 'Authorized FDRO',
       teamMembers: slip.teamMembers || 'NONE',
       driver: slip.driver || 'N/A',
@@ -132,30 +140,26 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
       setTimeout(() => setExportSuccess(false), 3500);
     } catch (e: any) {
       console.error('PDF export failed', e);
-      setExportError(e?.message || 'Failed to generate PDF. Please try Print / Native PDF.');
+      setExportError(e?.message || 'Failed to generate PDF.');
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handlePrint = () => {
-    printDispatchSlip();
-  };
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:shadow-none print:border-none print:w-full print:rounded-none">
-        {/* Top Control Bar (hidden on print) */}
+        {/* Top Control Bar */}
         <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between print:hidden gap-3 flex-wrap">
           <div className="flex items-center gap-2.5">
-            <span className="bg-[#056839] text-white font-bold text-xs px-2.5 py-0.5 rounded border border-emerald-500/50">
+            <span className="bg-[#056839] text-white font-bold tabular-nums text-xs px-2.5 py-0.5 rounded border border-emerald-500/50">
               CTRL: {slip.ctrlNo}
             </span>
-            <h3 className="font-bold text-sm sm:text-base text-slate-100 flex items-center gap-1.5">
+            <h3 className="font-bold text-sm sm:text-base text-slate-100 flex items-center gap-2">
               <span>FDA Official Dispatch Slip Preview</span>
               {isMultiPage && (
-                <span className="text-[11px] font-normal bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-full border border-slate-700">
-                  2 Pages (Includes Annex A)
+                <span className="text-xs font-normal text-emerald-400">
+                  · 2 Pages (Includes Annex A)
                 </span>
               )}
             </h3>
@@ -168,7 +172,7 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                   onClose();
                   onEdit(slip);
                 }}
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs transition border border-slate-700 cursor-pointer"
+                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs transition border border-slate-700 cursor-pointer whitespace-nowrap shrink-0"
                 title="Edit Dispatch Slip details"
               >
                 <Edit className="w-3.5 h-3.5" />
@@ -177,18 +181,9 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
             )}
 
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs transition border border-slate-700 cursor-pointer"
-              title="Print or Save via Browser PDF"
-            >
-              <Printer className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Print / Native PDF</span>
-            </button>
-
-            <button
               onClick={handleExportPdf}
               disabled={isExporting}
-              className="flex items-center gap-1.5 bg-[#056839] hover:bg-[#04522d] text-white font-semibold px-4 py-1.5 rounded-lg text-xs shadow-sm transition cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 bg-[#056839] hover:bg-[#04522d] text-white font-semibold px-4 py-1.5 rounded-lg text-xs shadow-sm transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
             >
               {exportSuccess ? (
                 <>
@@ -230,7 +225,6 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
 
         {/* Scrollable Document Container */}
         <div className="flex-1 overflow-y-auto bg-slate-300/80 p-4 sm:p-8 flex flex-col items-center gap-8 print:p-0 print:bg-white print:overflow-visible print:gap-0">
-          
           <div
             ref={printRef}
             id="dispatch-slip-print-container"
@@ -255,25 +249,24 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
               />
 
               {/* Main Content framed within official letterhead margins */}
-              <div className="relative z-10 pt-[132px] pb-[96px] px-[64px] flex-1 flex flex-col text-[12.5px] leading-[1.38]">
-                
+              <div className="relative z-10 pt-[130px] pb-[94px] px-[58px] flex-1 flex flex-col text-[15px] leading-[1.4]">
                 {/* Top Row: CTRL No. */}
-                <div className="flex items-center justify-between font-bold text-[13px] tracking-wide mb-1">
+                <div className="flex items-center justify-between font-bold text-[15.5px] tracking-wide mb-1">
                   <div>
                     CTRL No.:{' '}
-                    <span className="underline decoration-slate-900 underline-offset-3 font-extrabold text-[13.5px]">
+                    <span className="underline decoration-slate-900 underline-offset-3 font-extrabold text-[16px]">
                       {slip.ctrlNo}
                     </span>
                   </div>
                 </div>
 
                 {/* Document Title */}
-                <div className="text-center font-bold text-[15.5px] tracking-wider my-2 text-slate-950">
+                <div className="text-center font-bold text-[19px] tracking-wider my-2 text-slate-950">
                   DISPATCH SLIP
                 </div>
 
                 {/* Numbered Rules Matching Official Template */}
-                <div className="space-y-0.5 text-[11px] leading-tight mb-3 text-justify text-slate-800">
+                <div className="space-y-1 text-[13px] leading-[1.35] mb-3.5 text-justify text-slate-800">
                   <p>
                     1. This dispatch slip should be filled out and signed by the Cluster Directors and approved by the Deputy Director General, FROO prior or on the scheduled date of inspection.
                   </p>
@@ -285,8 +278,8 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                   </p>
                 </div>
 
-                {/* Authorization Statement with Dispatch Date */}
-                <p className="mb-2.5 text-justify leading-relaxed">
+                {/* Authorization Statement with Combined Dispatch Date */}
+                <p className="mb-3 text-justify leading-[1.42]">
                   This is to authorize the following Food Drug Regulation Officers (FDRO) of the Food and Drug Administration (FDA) to be dispatched on{' '}
                   <span className="underline font-bold decoration-slate-900 underline-offset-3">
                     {dispatchDate}
@@ -295,19 +288,19 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 </p>
 
                 {/* Establishments Section */}
-                <div className="mb-2 flex items-start">
-                  <span className="w-[125px] shrink-0 font-medium">Establishment:</span>
+                <div className="mb-2.5 flex items-start">
+                  <span className="w-[138px] shrink-0 font-semibold">Establishment:</span>
                   <div className="flex-1 space-y-0.5">
                     {page1Establishments.map((est, i) => (
                       <div key={i} className="flex">
-                        <span className="w-5 font-bold shrink-0">{i + 1}.</span>
+                        <span className="w-6 font-bold shrink-0">{i + 1}.</span>
                         <span className="font-bold underline decoration-slate-900 underline-offset-3 uppercase">
                           {est}
                         </span>
                       </div>
                     ))}
                     {isMultiPage && (
-                      <div className="text-[11px] font-sans font-medium text-emerald-800 italic pt-0.5">
+                      <div className="text-[12.5px] font-sans font-medium text-emerald-800 italic pt-0.5">
                         [+{establishments.length - 3} additional establishment(s) itemized on Annex A (Page 2)]
                       </div>
                     )}
@@ -315,19 +308,19 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 </div>
 
                 {/* Locations Section */}
-                <div className="mb-2.5 flex items-start">
-                  <span className="w-[125px] shrink-0 font-medium">Location:</span>
+                <div className="mb-3 flex items-start">
+                  <span className="w-[138px] shrink-0 font-semibold">Location:</span>
                   <div className="flex-1 space-y-0.5">
                     {page1Locations.map((loc, i) => (
                       <div key={i} className="flex text-justify">
-                        <span className="w-5 font-bold shrink-0">{i + 1}.</span>
+                        <span className="w-6 font-bold shrink-0">{i + 1}.</span>
                         <span className="underline decoration-slate-900 underline-offset-3">
                           {loc}
                         </span>
                       </div>
                     ))}
                     {isMultiPage && (
-                      <div className="text-[11px] font-sans font-medium text-emerald-800 italic pt-0.5">
+                      <div className="text-[12.5px] font-sans font-medium text-emerald-800 italic pt-0.5">
                         [Complete site itinerary detailed on Annex A (Page 2)]
                       </div>
                     )}
@@ -335,15 +328,15 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 </div>
 
                 {/* For the Purpose of Checkbox Matrix */}
-                <div className="mb-2">
-                  <div className="font-medium mb-1">
+                <div className="mb-2.5">
+                  <div className="font-semibold mb-1.5">
                     For the purpose of:{' '}
-                    <span className="text-[11.5px] italic font-normal">
+                    <span className="text-[13.5px] italic font-normal">
                       (Please check ( ✓ ) appropriate box/es.)
                     </span>
                   </div>
 
-                  <div className="space-y-1.5 pl-6 my-1.5 text-[12px]">
+                  <div className="space-y-2 pl-4 my-2 text-[14px]">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 border border-slate-900 flex items-center justify-center shrink-0 bg-white">
@@ -394,14 +387,14 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                     </div>
                   </div>
 
-                  <div className="mt-1">
+                  <div className="mt-1.5">
                     Others:{' '}
                     <span className="underline decoration-slate-900 underline-offset-3 font-semibold">
                       {othersPurpose || 'N/A'}
                     </span>
                   </div>
 
-                  <div className="mt-1">
+                  <div className="mt-1.5">
                     Time of Arrival:{' '}
                     <span className="underline decoration-slate-900 underline-offset-3">
                       {timeOfArrival}
@@ -410,7 +403,7 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 </div>
 
                 {/* Personnel & Vehicle Assignment Block */}
-                <div className="space-y-1.5 my-2.5 pt-1.5 border-t border-slate-200">
+                <div className="space-y-2 my-2.5 pt-2 border-t border-slate-200">
                   <div>
                     Team Leader:{' '}
                     <span className="underline font-bold decoration-slate-900 underline-offset-3 uppercase">
@@ -442,15 +435,15 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 </div>
 
                 {/* Signatures Block Pinned at the Bottom Above the Letterhead Footer */}
-                <div className="mt-auto pt-3 space-y-4">
+                <div className="mt-auto pt-3 space-y-5">
                   {/* Recommended / Requested by */}
                   <div>
-                    <div className="text-[12px] font-medium mb-4">Recommended/ Requested by:</div>
+                    <div className="text-[14.5px] font-medium mb-4">Recommended/ Requested by:</div>
                     <div className="pl-6">
-                      <div className="font-extrabold text-[12.5px] uppercase tracking-wide text-slate-950">
+                      <div className="font-extrabold text-[15.5px] uppercase tracking-wide text-slate-950">
                         {recommendedBy.name}
                       </div>
-                      <div className="text-[11px] text-slate-800 font-medium">
+                      <div className="text-[13.5px] text-slate-800 font-medium">
                         {recommendedBy.title}
                       </div>
                     </div>
@@ -458,19 +451,19 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
 
                   {/* Approved by */}
                   <div>
-                    <div className="text-[12px] font-medium mb-4 flex items-center justify-between">
+                    <div className="text-[14.5px] font-medium mb-4 flex items-center justify-between">
                       <span>Approved by:</span>
                       {slip.status === 'Approved' && (
-                        <span className="text-[10px] font-sans font-bold text-emerald-800 border border-emerald-600 px-2 py-0.5 rounded uppercase tracking-wider">
+                        <span className="text-[11px] font-sans font-bold text-emerald-800 border border-emerald-600 px-2 py-0.5 rounded uppercase tracking-wider">
                           Official FROO Approval Recorded
                         </span>
                       )}
                     </div>
                     <div className="pl-6">
-                      <div className="font-extrabold text-[12.5px] uppercase tracking-wide text-slate-950">
+                      <div className="font-extrabold text-[15.5px] uppercase tracking-wide text-slate-950">
                         {approvedBy.name}
                       </div>
-                      <div className="text-[11px] text-slate-800 font-medium">
+                      <div className="text-[13.5px] text-slate-800 font-medium">
                         {approvedBy.title}
                       </div>
                     </div>
@@ -478,12 +471,11 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
 
                   {/* Page 1 indicator */}
                   {isMultiPage && (
-                    <div className="text-right text-[10px] font-sans text-slate-400 pt-1">
+                    <div className="text-right text-[11.5px] font-sans text-slate-400 pt-1">
                       Page 1 of 2
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
 
@@ -507,10 +499,9 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                 />
 
                 {/* Content Area framed within official letterhead margins */}
-                <div className="relative z-10 pt-[132px] pb-[96px] px-[64px] flex-1 flex flex-col text-[12.5px] leading-[1.38]">
-                  
+                <div className="relative z-10 pt-[130px] pb-[94px] px-[58px] flex-1 flex flex-col text-[14.5px] leading-[1.4]">
                   {/* Header Row */}
-                  <div className="flex items-center justify-between font-bold text-[13px] tracking-wide mb-1">
+                  <div className="flex items-center justify-between font-bold text-[15.5px] tracking-wide mb-1">
                     <div>
                       CTRL No.:{' '}
                       <span className="underline decoration-slate-900 underline-offset-3 font-extrabold">
@@ -520,47 +511,52 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                   </div>
 
                   {/* Annex Title */}
-                  <div className="text-center font-bold text-[15px] tracking-wider my-2 text-slate-950">
+                  <div className="text-center font-bold text-[18px] tracking-wider my-2 text-slate-950">
                     DISPATCH SLIP — ANNEX A
                   </div>
-                  <div className="text-center text-[11.5px] font-sans uppercase font-semibold text-slate-700 tracking-wider mb-3">
+                  <div className="text-center text-[13.5px] font-sans uppercase font-semibold text-slate-700 tracking-wider mb-3">
                     Schedule of Establishments & Inspection Sites
                   </div>
 
                   {/* Reference Note */}
-                  <p className="text-[11.5px] text-justify leading-relaxed mb-3 text-slate-800">
+                  <p className="text-[14px] text-justify leading-relaxed mb-3 text-slate-800">
                     This Annex forms an integral part of Official Dispatch Slip{' '}
                     <strong className="underline">{slip.ctrlNo}</strong> authorizing the deployment of{' '}
                     <strong className="uppercase">{teamLeader}</strong> and team on{' '}
                     <strong>{dispatchDate}</strong>.
                   </p>
 
-                  {/* Regulatory Schedule Table */}
+                  {/* Regulatory Schedule Table with Per-Target Date Column */}
                   <div className="border border-slate-900 overflow-hidden mb-4">
-                    <table className="w-full text-left text-[11.5px] border-collapse">
+                    <table className="w-full text-left text-[13.5px] border-collapse">
                       <thead>
                         <tr className="bg-slate-100 border-b border-slate-900 text-slate-950 font-bold">
-                          <th className="py-2 px-2.5 border-r border-slate-900 w-10 text-center">No.</th>
-                          <th className="py-2 px-3 border-r border-slate-900 w-2/5">Establishment / Entity</th>
-                          <th className="py-2 px-3 border-r border-slate-900">Physical Location / Address</th>
-                          <th className="py-2 px-2.5 w-24 text-center">Target Scope</th>
+                          <th className="py-2 px-2 border-r border-slate-900 w-9 text-center">No.</th>
+                          <th className="py-2 px-2.5 border-r border-slate-900 w-[32%]">Establishment / Entity</th>
+                          <th className="py-2 px-2.5 border-r border-slate-900">Physical Location / Address</th>
+                          <th className="py-2 px-2.5 border-r border-slate-900 w-32 text-center">Targeted Date</th>
+                          <th className="py-2 px-2 w-24 text-center">Target Scope</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
                         {establishments.map((est, index) => {
                           const loc = locations[index] || locations[0] || '—';
+                          const tgtDate = targetDates[index] || dispatchDate || '—';
                           return (
                             <tr key={index} className={index % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
-                              <td className="py-2 px-2.5 border-r border-slate-900 font-bold text-center">
+                              <td className="py-2 px-2 border-r border-slate-900 font-bold text-center tabular-nums">
                                 {index + 1}
                               </td>
-                              <td className="py-2 px-3 border-r border-slate-900 font-bold uppercase">
+                              <td className="py-2 px-2.5 border-r border-slate-900 font-bold uppercase">
                                 {est}
                               </td>
-                              <td className="py-2 px-3 border-r border-slate-900 text-slate-800 leading-snug">
+                              <td className="py-2 px-2.5 border-r border-slate-900 text-slate-800 leading-snug">
                                 {loc}
                               </td>
-                              <td className="py-2 px-2.5 text-center text-[10.5px] text-slate-700 font-sans">
+                              <td className="py-2 px-2.5 border-r border-slate-900 text-center text-[12.5px] font-semibold text-slate-900 tabular-nums">
+                                {tgtDate}
+                              </td>
+                              <td className="py-2 px-2 text-center text-[12px] text-slate-700 font-sans">
                                 {purposes.inspection
                                   ? 'Inspection'
                                   : purposes.postMarketSurveillance
@@ -576,61 +572,43 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
                     </table>
                   </div>
 
-                  {/* Field Instructions & Conforme */}
-                  <div className="space-y-1 text-[11px] text-slate-800 leading-relaxed mb-4">
-                    <p className="font-semibold text-slate-900">Field Compliance Notes:</p>
-                    <p>• Inspection findings and regulatory sampling protocols must be recorded in the official FDRO Mission Report within 72 hours of completion.</p>
-                    <p>• Any encountered refusal of entry, unlicensed operation, or critical product violation must be escalated immediately to the Regional Director and ODDG-FROO.</p>
-                  </div>
-
-                  {/* Signatures on Annex Sheet */}
+                  {/* Signatures on Annex Sheet (Field Compliance Notes removed) */}
                   <div className="mt-auto pt-3 border-t border-slate-200 grid grid-cols-2 gap-8">
                     <div>
-                      <div className="text-[11.5px] font-medium mb-4">Conforme / Team Leader:</div>
-                      <div className="font-bold text-[12px] uppercase text-slate-950">{teamLeader}</div>
-                      <div className="text-[10.5px] text-slate-700">Food Drug Regulation Officer (FDRO)</div>
+                      <div className="text-[14px] font-medium mb-4">Conforme / Team Leader:</div>
+                      <div className="font-bold text-[15px] uppercase text-slate-950">{teamLeader}</div>
+                      <div className="text-[13px] text-slate-700">Food Drug Regulation Officer (FDRO)</div>
                     </div>
 
                     <div>
-                      <div className="text-[11.5px] font-medium mb-4">Certified Correct / Recommending:</div>
-                      <div className="font-bold text-[12px] uppercase text-slate-950">{recommendedBy.name}</div>
-                      <div className="text-[10.5px] text-slate-700">{recommendedBy.title}</div>
+                      <div className="text-[14px] font-medium mb-4">Certified Correct / Recommending:</div>
+                      <div className="font-bold text-[15px] uppercase text-slate-950">{recommendedBy.name}</div>
+                      <div className="text-[13px] text-slate-700">{recommendedBy.title}</div>
                     </div>
                   </div>
 
                   {/* Page 2 indicator */}
-                  <div className="text-right text-[10px] font-sans text-slate-400 pt-2">
+                  <div className="text-right text-[11.5px] font-sans text-slate-400 pt-2">
                     Page 2 of 2
                   </div>
-
                 </div>
               </div>
             )}
-
           </div>
-
         </div>
 
-        {/* Modal Bottom Status & Actions (hidden on print) */}
+        {/* Modal Bottom Status & Actions */}
         <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500 print:hidden flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
             <span>Official Letterhead conforming to FDA Philippines & FROO Standards</span>
-            {isMultiPage && <span className="font-semibold text-slate-700">• 2 Pages formatted for A4</span>}
+            {isMultiPage && <span className="font-semibold text-slate-700">· 2 Pages formatted for A4</span>}
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer flex items-center gap-1.5 transition"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print Slip</span>
-            </button>
             <button
               onClick={handleExportPdf}
               disabled={isExporting}
-              className="px-4 py-1.5 bg-[#056839] text-white rounded-lg font-semibold hover:bg-[#04522d] cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50 transition"
+              className="px-4 py-1.5 bg-[#056839] text-white rounded-lg font-semibold hover:bg-[#04522d] cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50 transition whitespace-nowrap shrink-0"
             >
               {exportSuccess ? (
                 <>
@@ -646,7 +624,6 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

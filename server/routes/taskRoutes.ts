@@ -62,7 +62,7 @@ async function fetchTaskById(taskId: string): Promise<any | null> {
   const dispatchSlips = [];
   for (const ds of dispatchRows) {
     const [destRows]: [any[], any] = await pool.query(
-      `SELECT establishment_name, location_address
+      `SELECT establishment_name, location_address, target_date
        FROM dispatch_slip_destinations
        WHERE dispatch_slip_id = ?
        ORDER BY sequence_no ASC`,
@@ -76,6 +76,7 @@ async function fetchTaskById(taskId: string): Promise<any | null> {
       dispatchDate: ds.dispatch_date,
       establishments: destRows.map((d: any) => d.establishment_name),
       locations: destRows.map((d: any) => d.location_address),
+      targetDates: destRows.map((d: any) => d.target_date || ds.dispatch_date || ''),
       purposes: {
         inspection: Boolean(ds.purpose_inspection),
         postMarketSurveillance: Boolean(ds.purpose_pms),

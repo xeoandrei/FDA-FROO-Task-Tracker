@@ -1,18 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Plus,
   Trash2,
   Calendar,
   FileText,
-  CheckSquare,
   ShieldCheck,
-  Car,
-  UserCheck,
-  AlertCircle,
   RotateCcw,
   CheckCircle,
-  HelpCircle,
 } from 'lucide-react';
 import { Task, DispatchSlip, DispatchStatus } from '../types/task';
 import { UserAccount } from '../types/auth';
@@ -29,6 +24,168 @@ interface CreateDispatchModalProps {
   currentUser?: UserAccount | null;
 }
 
+interface TargetDateRange {
+  startDate: string;
+  endDate: string;
+}
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function toIsoDateString(dateObj: Date): string {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseIsoParts(iso: string): { year: number; monthIdx: number; day: number } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { year: y, monthIdx: m - 1, day: d };
+}
+
+function parseTargetDateToRange(raw?: string, fallbackIso?: string): TargetDateRange {
+  const defaultIso =
+    fallbackIso && /^\d{4}-\d{2}-\d{2}$/.test(fallbackIso)
+      ? fallbackIso
+      : toIsoDateString(new Date());
+
+  if (!raw || !raw.trim()) {
+    return { startDate: defaultIso, endDate: '' };
+  }
+
+  const trimmed = raw.trim();
+
+  // Direct ISO date YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return { startDate: trimmed, endDate: '' };
+  }
+
+  // Pattern like "10-13 March 2026" or "6 March 2026"
+  const rangeSameMonthMatch = trimmed.match(/^(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s+([A-Za-z]+)\s+(\d{4})$/);
+  if (rangeSameMonthMatch) {
+    const day1 = Number(rangeSameMonthMatch[1]);
+    const day2 = rangeSameMonthMatch[2] ? Number(rangeSameMonthMatch[2]) : null;
+    const monthName = rangeSameMonthMatch[3].toLowerCase();
+    const year = Number(rangeSameMonthMatch[4]);
+    const mIdx = MONTH_NAMES.findIndex((m) => m.toLowerCase() === monthName);
+    if (mIdx >= 0) {
+      const mStr = String(mIdx + 1).padStart(2, '0');
+      const startIso = `${year}-${mStr}-${String(day1).padStart(2, '0')}`;
+      const endIso = day2 ? `${year}-${mStr}-${String(day2).padStart(2, '0')}` : '';
+      return { startDate: startIso, endDate: endIso };
+    }
+  }
+
+  // Fallback native Date parse (e.g. "October 27, 2026")
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return { startDate: toIsoDateString(parsed), endDate: '' };
+  }
+
+  return { startDate: defaultIso, endDate: '' };
+}
+
+export function formatSingleTargetDateRange(range: TargetDateRange): string {
+  const start = parseIsoParts(range.startDate);
+  if (!start) return '';
+
+  const end = range.endDate ? parseIsoParts(range.endDate) : null;
+  if (!end || range.endDate === range.startDate || range.endDate < range.startDate) {
+    return `${start.day} ${MONTH_NAMES[start.monthIdx]} ${start.year}`;
+  }
+
+  if (start.year === end.year && start.monthIdx === end.monthIdx) {
+    return `${start.day}-${end.day} ${MONTH_NAMES[start.monthIdx]} ${start.year}`;
+  }
+
+  if (start.year === end.year) {
+    return `${start.day} ${MONTH_NAMES[start.monthIdx]} - ${end.day} ${MONTH_NAMES[end.monthIdx]} ${start.year}`;
+  }
+
+  return `${start.day} ${MONTH_NAMES[start.monthIdx]} ${start.year} - ${end.day} ${MONTH_NAMES[end.monthIdx]} ${end.year}`;
+}
+
+export function formatConsolidatedDispatchDates(ranges: TargetDateRange[]): string {
+  const valid = ranges
+    .filter((r) => Boolean(parseIsoParts(r.startDate)))
+    .map((r) => ({
+      startDate: r.startDate,
+      endDate: r.endDate && r.endDate >= r.startDate ? r.endDate : r.startDate,
+    }))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+
+  if (valid.length === 0) return '';
+
+  // Deduplicate identical date ranges
+  const unique: Array<{ startDate: string; endDate: string }> = [];
+  for (const item of valid) {
+    if (!unique.some((u) => u.startDate === item.startDate && u.endDate === item.endDate)) {
+      unique.push(item);
+    }
+  }
+
+  // Group by Month + Year when start and end fall in the same month & year
+  const groups: Array<{ monthYear: string | null; tokens: string[] }> = [];
+
+  for (const item of unique) {
+    const s = parseIsoParts(item.startDate)!;
+    const e = parseIsoParts(item.endDate)!;
+
+    if (s.year === e.year && s.monthIdx === e.monthIdx) {
+      const monthYear = `${MONTH_NAMES[s.monthIdx]} ${s.year}`;
+      const token = s.day === e.day ? `${s.day}` : `${s.day}-${e.day}`;
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.monthYear === monthYear) {
+        if (!lastGroup.tokens.includes(token)) {
+          lastGroup.tokens.push(token);
+        }
+      } else {
+        groups.push({ monthYear, tokens: [token] });
+      }
+    } else {
+      groups.push({
+        monthYear: null,
+        tokens: [formatSingleTargetDateRange({ startDate: item.startDate, endDate: item.endDate })],
+      });
+    }
+  }
+
+  const formattedGroups = groups.map((g) => {
+    if (!g.monthYear) {
+      return g.tokens[0];
+    }
+    const t = g.tokens;
+    let joinedDays = '';
+    if (t.length === 1) {
+      joinedDays = t[0];
+    } else if (t.length === 2) {
+      joinedDays = `${t[0]} & ${t[1]}`;
+    } else {
+      joinedDays = `${t.slice(0, -1).join(', ')}, & ${t[t.length - 1]}`;
+    }
+    return `${joinedDays} ${g.monthYear}`;
+  });
+
+  if (formattedGroups.length === 1) return formattedGroups[0];
+  if (formattedGroups.length === 2) return `${formattedGroups[0]} & ${formattedGroups[1]}`;
+  return `${formattedGroups.slice(0, -1).join('; ')}; & ${formattedGroups[formattedGroups.length - 1]}`;
+}
+
 export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   isOpen,
   onClose,
@@ -38,19 +195,13 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   allTasks = [],
   currentUser,
 }) => {
-  // Use tasks from props or fallback to localStorage
   const taskRegistry = allTasks && allTasks.length > 0 ? allTasks : getStoredTasks();
-
-  const [dispatchDate, setDispatchDate] = useState(
-    existingSlip?.dispatchDate || 'October 27, 2026'
-  );
-
-  // Compute auto-generated sequence control number based on region, year, and dispatches so far
-  const initialAutoCtrl = generateDispatchControlNumber(task.region, dispatchDate, taskRegistry);
-  const [ctrlNo, setCtrlNo] = useState(
-    existingSlip?.ctrlNo || initialAutoCtrl.ctrlNo
-  );
-  const [ctrlMeta, setCtrlMeta] = useState(initialAutoCtrl);
+  const defaultTaskIsoDate =
+    task.scheduledDate && /^\d{4}-\d{2}-\d{2}$/.test(task.scheduledDate)
+      ? task.scheduledDate
+      : task.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)
+      ? task.dueDate
+      : toIsoDateString(new Date());
 
   const [establishments, setEstablishments] = useState<string[]>(
     existingSlip?.establishments && existingSlip.establishments.length > 0
@@ -66,6 +217,31 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
       : [task.location || `${task.region} Regional Jurisdiction`]
   );
 
+  const [targetDateRanges, setTargetDateRanges] = useState<TargetDateRange[]>(() => {
+    const count =
+      existingSlip?.establishments && existingSlip.establishments.length > 0
+        ? existingSlip.establishments.length
+        : 1;
+    return Array.from({ length: count }, (_, idx) =>
+      parseTargetDateToRange(
+        existingSlip?.targetDates?.[idx] || existingSlip?.dispatchDate,
+        defaultTaskIsoDate
+      )
+    );
+  });
+
+  const consolidatedDispatchDate = useMemo(() => {
+    const formatted = formatConsolidatedDispatchDates(targetDateRanges);
+    return formatted || existingSlip?.dispatchDate || formatSingleTargetDateRange({ startDate: defaultTaskIsoDate, endDate: '' });
+  }, [targetDateRanges, existingSlip, defaultTaskIsoDate]);
+
+  // Compute auto-generated sequence control number based on region, year, and dispatches so far
+  const initialAutoCtrl = generateDispatchControlNumber(task.region, consolidatedDispatchDate, taskRegistry);
+  const [ctrlNo, setCtrlNo] = useState(
+    existingSlip?.ctrlNo || initialAutoCtrl.ctrlNo
+  );
+  const [ctrlMeta, setCtrlMeta] = useState(initialAutoCtrl);
+
   const [purposes, setPurposes] = useState(
     existingSlip?.purposes || {
       inspection: task.category.toLowerCase().includes('inspect'),
@@ -76,7 +252,15 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     }
   );
 
-  const [othersPurpose, setOthersPurpose] = useState(existingSlip?.othersPurpose || 'N/A');
+  const hasInitialOthers = Boolean(
+    existingSlip?.othersPurpose &&
+      existingSlip.othersPurpose.trim() !== '' &&
+      existingSlip.othersPurpose.trim().toUpperCase() !== 'N/A'
+  );
+  const [isOthersChecked, setIsOthersChecked] = useState<boolean>(hasInitialOthers);
+  const [othersPurpose, setOthersPurpose] = useState(
+    hasInitialOthers ? existingSlip!.othersPurpose : 'N/A'
+  );
   const [timeOfArrival, setTimeOfArrival] = useState(existingSlip?.timeOfArrival || '');
   const [teamLeader, setTeamLeader] = useState(existingSlip?.teamLeader || task.assignedTo.toUpperCase());
   const [teamMembers, setTeamMembers] = useState(existingSlip?.teamMembers || 'NONE');
@@ -112,7 +296,6 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
         approvedByTitle: 'Deputy Director General - Field Regulatory Operations Office',
       };
     }
-    // Standard Dispatch (Pending RS / CD Approval): all signatory fields blank
     return {
       recommendedByName: '',
       recommendedByTitle: '',
@@ -147,22 +330,34 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     setApprovedByTitle(defaults.approvedByTitle);
   };
 
-  // Re-generate auto sequence when opening or when dispatch date year changes
   const handleRegenerateCtrlNo = () => {
-    const fresh = generateDispatchControlNumber(task.region, dispatchDate, taskRegistry);
+    const fresh = generateDispatchControlNumber(task.region, consolidatedDispatchDate, taskRegistry);
     setCtrlNo(fresh.ctrlNo);
     setCtrlMeta(fresh);
   };
 
-  // Sync state if existingSlip or modal open state changes
   useEffect(() => {
     if (existingSlip) {
       setCtrlNo(existingSlip.ctrlNo);
-      setDispatchDate(existingSlip.dispatchDate);
       setEstablishments(existingSlip.establishments);
       setLocations(existingSlip.locations);
+      const count = Math.max(existingSlip.establishments?.length || 1, 1);
+      setTargetDateRanges(
+        Array.from({ length: count }, (_, idx) =>
+          parseTargetDateToRange(
+            existingSlip.targetDates?.[idx] || existingSlip.dispatchDate,
+            defaultTaskIsoDate
+          )
+        )
+      );
       setPurposes(existingSlip.purposes);
-      setOthersPurpose(existingSlip.othersPurpose || 'N/A');
+      const hasCustomOthers = Boolean(
+        existingSlip.othersPurpose &&
+          existingSlip.othersPurpose.trim() !== '' &&
+          existingSlip.othersPurpose.trim().toUpperCase() !== 'N/A'
+      );
+      setIsOthersChecked(hasCustomOthers);
+      setOthersPurpose(hasCustomOthers ? existingSlip.othersPurpose : 'N/A');
       setTimeOfArrival(existingSlip.timeOfArrival || '');
       setTeamLeader(existingSlip.teamLeader);
       setTeamMembers(existingSlip.teamMembers || 'NONE');
@@ -191,14 +386,20 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   if (!isOpen) return null;
 
   const handleAddEstablishment = () => {
+    const lastRange = targetDateRanges[targetDateRanges.length - 1] || {
+      startDate: defaultTaskIsoDate,
+      endDate: '',
+    };
     setEstablishments([...establishments, '']);
     setLocations([...locations, '']);
+    setTargetDateRanges([...targetDateRanges, { startDate: lastRange.startDate, endDate: '' }]);
   };
 
   const handleRemoveEstablishment = (index: number) => {
     if (establishments.length <= 1) return;
     setEstablishments(establishments.filter((_, i) => i !== index));
     setLocations(locations.filter((_, i) => i !== index));
+    setTargetDateRanges(targetDateRanges.filter((_, i) => i !== index));
   };
 
   const handleEstablishmentChange = (index: number, val: string) => {
@@ -213,21 +414,45 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
     setLocations(updated);
   };
 
+  const handleTargetStartDateChange = (index: number, startDate: string) => {
+    const updated = [...targetDateRanges];
+    const current = updated[index] || { startDate: defaultTaskIsoDate, endDate: '' };
+    const nextEndDate = current.endDate && current.endDate < startDate ? '' : current.endDate;
+    updated[index] = { startDate, endDate: nextEndDate };
+    setTargetDateRanges(updated);
+  };
+
+  const handleTargetEndDateChange = (index: number, endDate: string) => {
+    const updated = [...targetDateRanges];
+    const current = updated[index] || { startDate: defaultTaskIsoDate, endDate: '' };
+    updated[index] = { ...current, endDate };
+    setTargetDateRanges(updated);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const cleanedEst = establishments.map((e) => e.trim()).filter(Boolean);
-    const cleanedLoc = locations.map((l) => l.trim()).filter(Boolean);
+    const cleanedEst = establishments.map((est) => est.trim()).filter(Boolean);
+    const cleanedLoc = locations.map((loc) => loc.trim()).filter(Boolean);
+    const formattedTargetDates = targetDateRanges.map((range) =>
+      formatSingleTargetDateRange(range) || consolidatedDispatchDate
+    );
+
+    const resolvedOthersPurpose =
+      isOthersChecked && othersPurpose.trim() && othersPurpose.trim().toUpperCase() !== 'N/A'
+        ? othersPurpose.trim()
+        : 'N/A';
 
     const slip: DispatchSlip = {
       id: existingSlip?.id || `disp-${Date.now()}`,
       taskId: task.id,
       ctrlNo: ctrlNo.trim(),
-      dispatchDate: dispatchDate.trim(),
+      dispatchDate: consolidatedDispatchDate,
       establishments: cleanedEst.length > 0 ? cleanedEst : ['FOOD AND DRUG ESTABLISHMENT'],
       locations: cleanedLoc.length > 0 ? cleanedLoc : [task.region],
+      targetDates: formattedTargetDates,
       purposes,
-      othersPurpose: othersPurpose.trim() || 'N/A',
+      othersPurpose: resolvedOthersPurpose,
       timeOfArrival: timeOfArrival.trim(),
       teamLeader: teamLeader.trim(),
       teamMembers: teamMembers.trim(),
@@ -292,7 +517,7 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             </div>
           </div>
 
-          {/* Row 1: Auto-Generated Control Number & Dispatch Date */}
+          {/* Row 1: Auto-Generated Control Number & Combined Schedule Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -315,45 +540,43 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
                   required
                   value={ctrlNo}
                   onChange={(e) => setCtrlNo(e.target.value.toUpperCase())}
-                  className="w-full font-mono font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-[#056839] focus:outline-none focus:border-[#056839] focus:bg-white"
+                  className="w-full font-mono tabular-nums font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-[#056839] focus:outline-none focus:border-[#056839] focus:bg-white"
                 />
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Sequence: Region prefix {ctrlMeta.prefix} • Year {ctrlMeta.year} • Mission #{ctrlMeta.sequenceNumber}
+                Sequence: Region prefix {ctrlMeta.prefix} · Year {ctrlMeta.year} · Mission #{ctrlMeta.sequenceNumber}
               </span>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Dispatch Date (Date of Mission)
+                Combined Dispatch Schedule (Auto-Formatted)
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  required
-                  value={dispatchDate}
-                  onChange={(e) => setDispatchDate(e.target.value)}
-                  placeholder="e.g. October 27, 2026"
-                  className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+                  readOnly
+                  value={consolidatedDispatchDate}
+                  className="w-full text-xs font-semibold tabular-nums bg-emerald-50/60 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-950 focus:outline-none"
                 />
-                <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                <Calendar className="w-4 h-4 text-[#056839] absolute right-3 top-2.5 pointer-events-none" />
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Format: Month DD, YYYY
+                Automatically combined from the Targeted Date(s) below
               </span>
             </div>
           </div>
 
-          {/* Establishments & Locations List */}
+          {/* Establishments, Locations & Per-Target Dates List */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-semibold text-slate-800">
-                Target Establishments & Locations
+                Target Establishments, Locations & Targeted Dates
               </label>
               <button
                 type="button"
                 onClick={handleAddEstablishment}
-                className="text-xs text-[#056839] font-medium hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs text-[#056839] font-medium hover:underline flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Another Target</span>
@@ -361,46 +584,96 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             </div>
 
             <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              {establishments.map((est, index) => (
-                <div key={index} className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2 relative">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[#056839]">
-                      Target #{index + 1}
-                    </span>
-                    {establishments.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEstablishment(index)}
-                        className="text-slate-400 hover:text-rose-600 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+              {establishments.map((est, index) => {
+                const currentRange = targetDateRanges[index] || {
+                  startDate: defaultTaskIsoDate,
+                  endDate: '',
+                };
+                const formattedTargetPreview = formatSingleTargetDateRange(currentRange);
 
-                  <div>
-                    <input
-                      type="text"
-                      required
-                      value={est}
-                      onChange={(e) => handleEstablishmentChange(index, e.target.value)}
-                      placeholder="Establishment / Facility Name (e.g. CAREPHAR PHARMA)"
-                      className="w-full text-xs font-semibold uppercase border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
-                    />
-                  </div>
+                return (
+                  <div key={index} className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2.5 relative">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-[#056839]">
+                          Target #{index + 1}
+                        </span>
+                        {formattedTargetPreview && (
+                          <span className="text-[11px] text-slate-500 tabular-nums">
+                            · {formattedTargetPreview}
+                          </span>
+                        )}
+                      </div>
+                      {establishments.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEstablishment(index)}
+                          className="text-slate-400 hover:text-rose-600 transition"
+                          title="Remove Target"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
 
-                  <div>
-                    <input
-                      type="text"
-                      required
-                      value={locations[index] || ''}
-                      onChange={(e) => handleLocationChange(index, e.target.value)}
-                      placeholder="Specific Complete Address / Location"
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
-                    />
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Establishment Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={est}
+                        onChange={(e) => handleEstablishmentChange(index, e.target.value)}
+                        placeholder="Establishment / Facility Name (e.g. CAREPHAR PHARMA)"
+                        className="w-full text-xs font-semibold uppercase border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Specific Complete Address / Location <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={locations[index] || ''}
+                        onChange={(e) => handleLocationChange(index, e.target.value)}
+                        placeholder="Specific Complete Address / Location"
+                        className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                          Targeted Date (Start Date) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={currentRange.startDate}
+                          onChange={(e) => handleTargetStartDateChange(index, e.target.value)}
+                          className="w-full text-xs tabular-nums border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                          End Date <span className="text-slate-400 font-normal">(Optional if multi-day)</span>
+                        </label>
+                        <input
+                          type="date"
+                          min={currentRange.startDate}
+                          value={currentRange.endDate}
+                          onChange={(e) => handleTargetEndDateChange(index, e.target.value)}
+                          className="w-full text-xs tabular-nums border border-slate-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -409,56 +682,92 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             <label className="block text-xs font-semibold text-slate-800 mb-1.5">
               Purpose of Dispatch (Check applicable)
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <label className="flex items-center gap-2 cursor-pointer text-xs">
-                <input
-                  type="checkbox"
-                  checked={purposes.inspection}
-                  onChange={(e) => setPurposes({ ...purposes, inspection: e.target.checked })}
-                  className="rounded text-[#056839] focus:ring-[#056839]"
-                />
-                <span>Inspection</span>
-              </label>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={purposes.inspection}
+                    onChange={(e) => setPurposes({ ...purposes, inspection: e.target.checked })}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Inspection</span>
+                </label>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs">
-                <input
-                  type="checkbox"
-                  checked={purposes.postMarketSurveillance}
-                  onChange={(e) => setPurposes({ ...purposes, postMarketSurveillance: e.target.checked })}
-                  className="rounded text-[#056839] focus:ring-[#056839]"
-                />
-                <span>Post Market Surveillance</span>
-              </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={purposes.postMarketSurveillance}
+                    onChange={(e) => setPurposes({ ...purposes, postMarketSurveillance: e.target.checked })}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Post Market Surveillance</span>
+                </label>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs">
-                <input
-                  type="checkbox"
-                  checked={purposes.investigation}
-                  onChange={(e) => setPurposes({ ...purposes, investigation: e.target.checked })}
-                  className="rounded text-[#056839] focus:ring-[#056839]"
-                />
-                <span>Investigation</span>
-              </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={purposes.investigation}
+                    onChange={(e) => setPurposes({ ...purposes, investigation: e.target.checked })}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Investigation</span>
+                </label>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs">
-                <input
-                  type="checkbox"
-                  checked={purposes.witnessForDestruction}
-                  onChange={(e) => setPurposes({ ...purposes, witnessForDestruction: e.target.checked })}
-                  className="rounded text-[#056839] focus:ring-[#056839]"
-                />
-                <span>Witness for Destruction</span>
-              </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={purposes.witnessForDestruction}
+                    onChange={(e) => setPurposes({ ...purposes, witnessForDestruction: e.target.checked })}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Witness for Destruction</span>
+                </label>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs">
-                <input
-                  type="checkbox"
-                  checked={purposes.attendanceToMeeting}
-                  onChange={(e) => setPurposes({ ...purposes, attendanceToMeeting: e.target.checked })}
-                  className="rounded text-[#056839] focus:ring-[#056839]"
-                />
-                <span>Attendance to Meeting</span>
-              </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={purposes.attendanceToMeeting}
+                    onChange={(e) => setPurposes({ ...purposes, attendanceToMeeting: e.target.checked })}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Attendance to Meeting</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={isOthersChecked}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsOthersChecked(checked);
+                      if (!checked) {
+                        setOthersPurpose('N/A');
+                      } else if (othersPurpose === 'N/A') {
+                        setOthersPurpose('');
+                      }
+                    }}
+                    className="rounded text-[#056839] focus:ring-[#056839]"
+                  />
+                  <span>Others</span>
+                </label>
+              </div>
+
+              {isOthersChecked && (
+                <div className="pt-2 border-t border-slate-200/80 animate-in fade-in duration-150">
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Specify Other Purpose of Dispatch <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required={isOthersChecked}
+                    value={othersPurpose === 'N/A' ? '' : othersPurpose}
+                    onChange={(e) => setOthersPurpose(e.target.value)}
+                    placeholder="Type the specific purpose of dispatch..."
+                    className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -590,13 +899,13 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition whitespace-nowrap shrink-0"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <CheckCircle className="w-4 h-4" />
               <span>{existingSlip ? 'Save Changes' : 'Generate Dispatch Slip'}</span>

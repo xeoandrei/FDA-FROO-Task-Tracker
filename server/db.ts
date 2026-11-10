@@ -558,13 +558,14 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     return [list, []];
   }
   if (normalizedSql.startsWith('INSERT INTO dispatch_slip_destinations')) {
-    const [dispatch_slip_id, sequence_no, establishment_name, location_address] = params;
+    const [dispatch_slip_id, sequence_no, establishment_name, location_address, target_date] = params;
     const dest = {
       id: fallbackStore.dispatch_slip_destinations.length + 1,
       dispatch_slip_id,
       sequence_no,
       establishment_name,
       location_address,
+      target_date: target_date || null,
       created_at: new Date().toISOString(),
     };
     fallbackStore.dispatch_slip_destinations.push(dest);

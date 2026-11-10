@@ -22,6 +22,7 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
       dispatchDate,
       establishments,
       locations,
+      targetDates,
       purposes,
       othersPurpose,
       timeOfArrival,
@@ -87,15 +88,17 @@ router.post('/tasks/:taskId/dispatches', authenticateToken, async (req: Authenti
     // Insert destinations
     const estList = Array.isArray(establishments) ? establishments : [];
     const locList = Array.isArray(locations) ? locations : [];
+    const dateList = Array.isArray(targetDates) ? targetDates : [];
     const maxLen = Math.max(estList.length, locList.length, 1);
 
     for (let i = 0; i < maxLen; i++) {
       const estName = estList[i] || 'Designated Facility';
       const locAddr = locList[i] || 'Field Jurisdiction';
+      const tgtDate = dateList[i] || dispatchDate || null;
       await connection.query(
-        `INSERT INTO dispatch_slip_destinations (dispatch_slip_id, sequence_no, establishment_name, location_address)
-         VALUES (?, ?, ?, ?)`,
-        [dispatchId, i + 1, estName, locAddr]
+        `INSERT INTO dispatch_slip_destinations (dispatch_slip_id, sequence_no, establishment_name, location_address, target_date)
+         VALUES (?, ?, ?, ?, ?)`,
+        [dispatchId, i + 1, estName, locAddr, tgtDate]
       );
     }
 
