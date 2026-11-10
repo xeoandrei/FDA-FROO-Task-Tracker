@@ -65,8 +65,14 @@ async function startServer() {
     }
   });
 
-  // Mount Vite frontend in development or serve static in production
-  if (process.env.NODE_ENV === 'production') {
+  // Mount Vite frontend in development or serve static in production (including Railway / Render)
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+    Boolean(process.env.RAILWAY_PROJECT_ID) ||
+    Boolean(process.env.RENDER);
+
+  if (isProduction) {
     app.use(express.static(path.resolve(__dirname, 'dist')));
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));

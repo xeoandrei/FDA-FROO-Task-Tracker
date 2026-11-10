@@ -1,20 +1,23 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
-const databaseUrl = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT || 3307),
-  user: process.env.DB_USER || 'froo_user',
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || 'froo_db',
+const connectionUri = process.env.MYSQL_URL || process.env.DATABASE_URL || '';
+
+const databaseConfig: mysql.PoolOptions = {
+  host: process.env.DB_HOST || process.env.MYSQLHOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3307),
+  user: process.env.DB_USER || process.env.MYSQLUSER || 'froo_user',
+  password: process.env.DB_PASSWORD ?? process.env.MYSQLPASSWORD,
+  database: process.env.DB_NAME || process.env.MYSQLDATABASE || 'froo_db',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
 };
 
 let rawPool: mysql.Pool | null = null;
 try {
-  rawPool = mysql.createPool(databaseUrl);
+  rawPool = connectionUri ? mysql.createPool(connectionUri) : mysql.createPool(databaseConfig);
 } catch (err) {
   console.warn('⚠️ Could not initialize MySQL pool:', err);
 }
@@ -659,7 +662,7 @@ export async function checkDatabaseConnection(): Promise<void> {
     try {
       await conn.query('SELECT 1');
       isDatabaseAlive = true;
-      console.log('✅ Connected to FROO MySQL database on port ' + databaseUrl.port);
+      console.log(`✅ Connected to FROO MySQL database (${databaseConfig.host}:${databaseConfig.port})`);
     } finally {
       conn.release();
     }
