@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { hashPassword, comparePassword, generateToken, authenticateToken, AuthenticatedRequest } from '../auth';
+import { sendAccountRegistrationEmails } from '../services/emailService';
 
 const router = Router();
 
@@ -204,6 +205,16 @@ router.post('/register', async (req, res) => {
       createdAt: new Date().toISOString(),
       lastActivity: 'Awaiting Administrator Approval',
     };
+
+    // Trigger non-blocking registration confirmation email to applicant + alert to oddgfroo@fda.gov.ph
+    sendAccountRegistrationEmails({
+      firstName: safeUser.firstName,
+      lastName: safeUser.lastName,
+      username: safeUser.username,
+      email: safeUser.email,
+      position: safeUser.position,
+      office: safeUser.office,
+    }).catch((err) => console.warn('Registration email notice:', err));
 
     res.status(201).json({
       message: `Staff account for ${safeUser.firstName} ${safeUser.lastName} submitted successfully! Your account is pending review and approval by the Superadmin or an ODDG-FROO Administrator in the User & Access panel before you can sign in.`,

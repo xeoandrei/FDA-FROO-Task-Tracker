@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authenticateToken, requireRoles, hashPassword, AuthenticatedRequest } from '../auth';
+import { sendAccountApprovedEmail } from '../services/emailService';
 
 const router = Router();
 
@@ -127,6 +128,18 @@ router.post('/', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (
       );
     }
 
+    // Fire non-blocking welcome email to the newly created staff account
+    sendAccountApprovedEmail({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      username: uname,
+      email: email.trim().toLowerCase(),
+      position: position || 'Food-Drug Regulation Officer (FDRO)',
+      office: resolvedOfficeCode,
+      approvedByName: req.user ? `${req.user.firstName} ${req.user.lastName}` : 'ODDG-FROO Administrator',
+      temporaryPassword: password,
+    }).catch((err) => console.warn('Welcome email notice:', err));
+
     res.status(201).json({
       id,
       username: uname,
@@ -217,6 +230,17 @@ router.post('/:id/approve', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN
         ]
       );
     }
+
+    // Fire non-blocking approval email to the activated staff member
+    sendAccountApprovedEmail({
+      firstName: targetUser.first_name,
+      lastName: targetUser.last_name,
+      username: targetUser.username || targetUser.email.split('@')[0],
+      email: targetUser.email,
+      position: targetUser.position || 'Food-Drug Regulation Officer (FDRO)',
+      office: targetUser.office_code,
+      approvedByName: req.user ? `${req.user.firstName} ${req.user.lastName}` : 'ODDG-FROO Administrator',
+    }).catch((err) => console.warn('Approval email notice:', err));
 
     res.json({
       success: true,

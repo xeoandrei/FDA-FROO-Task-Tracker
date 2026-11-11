@@ -200,6 +200,23 @@ export const api = {
     });
   },
 
+  async sendTaskReminder(
+    taskId: string,
+    customNote?: string
+  ): Promise<{
+    success: boolean;
+    sent: boolean;
+    mode: string;
+    recipients: string[];
+    error?: string;
+    task?: Task;
+  }> {
+    return request(`/api/tasks/${taskId}/remind`, {
+      method: 'POST',
+      body: JSON.stringify({ customNote }),
+    });
+  },
+
   // Dispatches
   async createDispatch(taskId: string, dispatchData: any): Promise<any> {
     return request(`/api/tasks/${taskId}/dispatches`, {

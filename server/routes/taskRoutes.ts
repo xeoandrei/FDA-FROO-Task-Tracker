@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../auth';
+import {
+  sendTaskAssignedNotification,
+  sendTaskReceivedNotification,
+  sendTaskReminderNotification,
+} from '../services/emailService';
 
 const router = Router();
 
@@ -368,6 +373,25 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     await connection.commit();
 
     const createdTask = await fetchTaskById(taskId);
+
+    // Fire non-blocking email notification to assigned staff
+    sendTaskAssignedNotification({
+      id: taskId,
+      dtn: finalDtn,
+      taskTitle: taskTitle.trim(),
+      category,
+      origin,
+      assignedTo: assignedNamesString || 'Assigned Staff',
+      assignedToUserId: targetUserId,
+      region: resolvedRegion,
+      dueDate,
+      scheduledDate: scheduledDate || undefined,
+      location: location || 'In-Office / N/A',
+      description: description || '',
+      priority: priority || 'Normal',
+      createdBy: actorName,
+    }).catch((err) => console.warn('Task assignment email notice:', err));
+
     res.status(201).json(createdTask);
   } catch (error: any) {
     await connection.rollback();
@@ -512,6 +536,26 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
     await connection.commit();
 
     const updatedTask = await fetchTaskById(id);
+
+    // Fire non-blocking receipt confirmation & update guidance email
+    sendTaskReceivedNotification({
+      task: {
+        id,
+        dtn: task.dtn,
+        taskTitle: task.task_title,
+        category: task.category,
+        region: task.region,
+        dueDate: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '',
+        assignedTo: task.assigned_to_names || actorName,
+      },
+      receiver: {
+        name: actorName,
+        email: user.email,
+        office: actorOffice,
+        role: user.role,
+      },
+    }).catch((err) => console.warn('Task received email notice:', err));
+
     res.json(updatedTask);
   } catch (error) {
     await connection.rollback();
@@ -767,6 +811,91 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res) 
   } catch (error) {
     console.error('Delete task error:', error);
     res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
+// POST /api/tasks/:id/remind - Send follow-up / reminder email to assigned/receiving staff
+router.post('/:id/remind', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const { customNote } = req.body || {};
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Active session required' });
+    }
+
+    const [rows]: [any[], any] = await connection.query(
+      `SELECT t.*, u_rec.email AS received_by_email
+       FROM tasks t
+       LEFT JOIN users u_rec ON t.received_by_user_id = u_rec.id
+       WHERE t.id = ? LIMIT 1`,
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const task = rows[0];
+    const senderName = `${user.firstName} ${user.lastName}`;
+    const validActorId = await resolveValidUserId(connection, user.id);
+
+    const emailResult = await sendTaskReminderNotification({
+      task: {
+        id: task.id,
+        dtn: task.dtn,
+        taskTitle: task.task_title,
+        category: task.category,
+        region: task.region,
+        dueDate: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '',
+        status: task.status,
+        priority: task.priority,
+        assignedTo: task.assigned_to_names || 'Assigned Staff',
+        assignedToUserId: task.assigned_to_user_id,
+        receivedByEmail: task.received_by_email || null,
+      },
+      senderName,
+      customNote: customNote ? String(customNote).trim() : undefined,
+    });
+
+    // Record reminder in task activity log
+    const recipientSummary =
+      emailResult.recipients.length > 0 ? emailResult.recipients.join(', ') : task.assigned_to_names || 'Assignee';
+
+    await connection.query(
+      `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        `Follow-up email reminder sent to ${recipientSummary}.`,
+        senderName,
+        user.office,
+        validActorId,
+        customNote
+          ? `Reminder note: "${String(customNote).trim()}"`
+          : task.status === 'Open'
+          ? 'Reminded assignee to officially receive and accept the task.'
+          : 'Reminded assignee to log progress update or mark task as completed.',
+        task.status,
+      ]
+    );
+
+    const updatedTask = await fetchTaskById(id);
+    res.json({
+      success: true,
+      sent: emailResult.sent,
+      mode: emailResult.mode,
+      recipients: emailResult.recipients,
+      error: emailResult.error,
+      task: updatedTask,
+    });
+  } catch (error: any) {
+    console.error('Send task reminder error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to send task reminder email' });
+  } finally {
+    connection.release();
   }
 });
 
