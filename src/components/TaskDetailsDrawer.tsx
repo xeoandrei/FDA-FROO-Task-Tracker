@@ -88,7 +88,9 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   const [editRegion, setEditRegion] = useState(task?.region || '');
 
   // Email reminder state
+  const [isConfirmingReminder, setIsConfirmingReminder] = useState(false);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [reminderCooldown, setReminderCooldown] = useState(0);
   const [reminderFeedback, setReminderFeedback] = useState<{
     type: 'success' | 'info' | 'error';
     message: string;
@@ -98,10 +100,21 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   const [isConfirmingDeleteTask, setIsConfirmingDeleteTask] = useState(false);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
 
+  // Inline confirmation for Dispatch Slip actions (Approve / Reject / Delete)
+  const [confirmingDispatchAction, setConfirmingDispatchAction] = useState<{
+    slipId: string;
+    type: 'approve' | 'reject' | 'delete';
+  } | null>(null);
+  const [rejectDispatchReason, setRejectDispatchReason] = useState('');
+
   useEffect(() => {
     setReminderFeedback(null);
+    setIsConfirmingReminder(false);
+    setReminderCooldown(0);
     setIsConfirmingDeleteTask(false);
     setIsDeletingTask(false);
+    setConfirmingDispatchAction(null);
+    setRejectDispatchReason('');
     if (task) {
       setEditDtn(task.dtn || '');
       setEditScheduledDate(task.scheduledDate || '');
@@ -111,7 +124,16 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       setEditAssignedTo(task.assignedTo);
       setEditRegion(task.region);
     }
-  }, [task]);
+  }, [task?.id]);
+
+  // Countdown timer for anti-spam email reminder cooldown
+  useEffect(() => {
+    if (reminderCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setReminderCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [reminderCooldown]);
 
   if (!isOpen || !task) return null;
 
@@ -160,15 +182,19 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
   };
 
-  // Send Email Reminder handler
+  // Send Email Reminder handler (only called after explicit user confirmation)
   const handleSendReminderEmail = async () => {
+    if (isSendingReminder || reminderCooldown > 0) return;
     try {
       setIsSendingReminder(true);
+      setIsConfirmingReminder(false);
       setReminderFeedback(null);
       const res = await api.sendTaskReminder(task.id);
       if (res.task) {
         onUpdateTask(res.task);
       }
+      // Enforce 60-second anti-spam cooldown after sending
+      setReminderCooldown(60);
       if (res.sent) {
         setReminderFeedback({
           type: 'success',
@@ -476,8 +502,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     }
   };
 
-  const handleRejectDispatchSlip = async (slip: DispatchSlip) => {
-    const reason = prompt('Please enter the reason for rejecting this dispatch request:');
+  const handleRejectDispatchSlip = async (slip: DispatchSlip, explicitReason?: string) => {
+    const reason = (explicitReason ?? rejectDispatchReason).trim();
     if (!reason) return;
 
     try {
@@ -510,6 +536,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     };
 
     onUpdateTask(updatedTask);
+    setConfirmingDispatchAction(null);
+    setRejectDispatchReason('');
 
     if (currentUser) {
       logSystemAction(
@@ -533,6 +561,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       dispatchSlips: filtered,
     };
     onUpdateTask(updatedTask);
+    setConfirmingDispatchAction(null);
   };
 
   const getStatusColor = (status: TaskStatus) => {
@@ -678,13 +707,19 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
                     <button
                       type="button"
-                      disabled={isSendingReminder}
-                      onClick={handleSendReminderEmail}
-                      className="px-3.5 py-2 text-xs font-semibold text-blue-900 bg-white hover:bg-blue-100/80 border border-blue-300 rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      disabled={isSendingReminder || reminderCooldown > 0}
+                      onClick={() => setIsConfirmingReminder(true)}
+                      className="px-3.5 py-2 text-xs font-semibold text-blue-900 bg-white hover:bg-blue-100/80 border border-blue-300 rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
                       title="Send email reminder from oddgfroo@fda.gov.ph to assigned staff to receive this task"
                     >
                       <Mail className="w-3.5 h-3.5 text-blue-700" />
-                      <span>{isSendingReminder ? 'Sending Reminder...' : 'Send Email Reminder'}</span>
+                      <span>
+                        {isSendingReminder
+                          ? 'Sending Reminder...'
+                          : reminderCooldown > 0
+                          ? `Reminder Sent (${reminderCooldown}s)`
+                          : 'Send Email Reminder'}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -723,13 +758,19 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                 <div className="flex flex-wrap items-center gap-2 self-center">
                   <button
                     type="button"
-                    disabled={isSendingReminder}
-                    onClick={handleSendReminderEmail}
-                    className="px-3.5 py-2 text-xs font-semibold text-amber-950 bg-white hover:bg-amber-100/80 border border-amber-300 rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    disabled={isSendingReminder || reminderCooldown > 0}
+                    onClick={() => setIsConfirmingReminder(true)}
+                    className="px-3.5 py-2 text-xs font-semibold text-amber-950 bg-white hover:bg-amber-100/80 border border-amber-300 rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
                     title="Send email reminder from oddgfroo@fda.gov.ph to update task progress or mark as completed"
                   >
                     <Mail className="w-3.5 h-3.5 text-amber-700" />
-                    <span>{isSendingReminder ? 'Sending Reminder...' : 'Send Update Reminder'}</span>
+                    <span>
+                      {isSendingReminder
+                        ? 'Sending Reminder...'
+                        : reminderCooldown > 0
+                        ? `Reminder Sent (${reminderCooldown}s)`
+                        : 'Send Update Reminder'}
+                    </span>
                   </button>
 
                   <button
@@ -740,6 +781,45 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                     <span>Mark as Completed</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Anti-Spam Confirmation Banner before sending Email Reminder */}
+          {isConfirmingReminder && (
+            <div className="rounded-xl p-3.5 bg-blue-50 border border-blue-300 text-blue-950 space-y-2.5 animate-in fade-in duration-150 shadow-2xs">
+              <div className="flex items-start gap-2.5">
+                <Mail className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                <div className="text-xs leading-relaxed">
+                  <span className="font-bold block text-blue-950">
+                    Confirm Email Reminder Notification
+                  </span>
+                  <span>
+                    Send an official reminder email from{' '}
+                    <strong className="font-mono">oddgfroo@fda.gov.ph</strong> to{' '}
+                    <strong>{task.receivedBy || task.assignedTo}</strong> ({task.region}) for task{' '}
+                    <strong>{task.id}</strong>?
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isSendingReminder}
+                  onClick={() => setIsConfirmingReminder(false)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingReminder}
+                  onClick={handleSendReminderEmail}
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSendingReminder ? 'Sending...' : 'Confirm & Send Email'}</span>
+                </button>
               </div>
             </div>
           )}
@@ -1162,14 +1242,52 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteDispatch(slip.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                            onClick={() =>
+                              setConfirmingDispatchAction(
+                                confirmingDispatchAction?.slipId === slip.id &&
+                                  confirmingDispatchAction.type === 'delete'
+                                  ? null
+                                  : { slipId: slip.id, type: 'delete' }
+                              )
+                            }
+                            className={`p-1.5 rounded-md transition cursor-pointer ${
+                              confirmingDispatchAction?.slipId === slip.id &&
+                              confirmingDispatchAction.type === 'delete'
+                                ? 'text-rose-700 bg-rose-100'
+                                : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                            }`}
                             title="Delete Dispatch Slip"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
+
+                      {/* Inline Delete Confirmation for Dispatch Slip */}
+                      {confirmingDispatchAction?.slipId === slip.id &&
+                        confirmingDispatchAction.type === 'delete' && (
+                          <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-[11px] font-semibold text-rose-900">
+                              Delete Dispatch Slip {slip.ctrlNo}?
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingDispatchAction(null)}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDispatch(slip.id)}
+                                className="px-2.5 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded cursor-pointer"
+                              >
+                                Yes, Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                       {/* Establishments preview */}
                       <div className="text-xs">
@@ -1203,38 +1321,119 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
                       {/* APPROVAL ACTION BAR (Supervisor / ODDG) */}
                       {slip.status.includes('Pending') && (
-                        <div className="mt-2 pt-2 border-t border-slate-100 bg-slate-50 p-2.5 rounded-lg flex items-center justify-between gap-2 flex-wrap">
-                          <div className="text-[11px] text-slate-600">
-                            <span className="font-semibold text-slate-800 block">Approval Routing:</span>
-                            {slip.status === 'Pending Regional Supervisor Approval' ? (
-                              <span>Awaiting Regional Supervisor of {task.region}</span>
+                        <div className="mt-2 pt-2 border-t border-slate-100 bg-slate-50 p-2.5 rounded-lg space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="text-[11px] text-slate-600">
+                              <span className="font-semibold text-slate-800 block">Approval Routing:</span>
+                              {slip.status === 'Pending Regional Supervisor Approval' ? (
+                                <span>Awaiting Regional Supervisor of {task.region}</span>
+                              ) : (
+                                <span>Awaiting Deputy Director General (ODDG-FROO)</span>
+                              )}
+                            </div>
+
+                            {canApprove ? (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setConfirmingDispatchAction({
+                                      slipId: slip.id,
+                                      type: 'approve',
+                                    })
+                                  }
+                                  className="px-2.5 py-1 text-[11px] font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded transition flex items-center gap-1 cursor-pointer shadow-xs"
+                                >
+                                  <ThumbsUp className="w-3 h-3" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRejectDispatchReason('');
+                                    setConfirmingDispatchAction({
+                                      slipId: slip.id,
+                                      type: 'reject',
+                                    });
+                                  }}
+                                  className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition flex items-center gap-1 cursor-pointer"
+                                >
+                                  <ThumbsDown className="w-3 h-3" />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
                             ) : (
-                              <span>Awaiting Deputy Director General (ODDG-FROO)</span>
+                              <span className="text-[10px] text-slate-400 italic">
+                                {reason || 'Approval rights reserved to authorized supervisor'}
+                              </span>
                             )}
                           </div>
 
-                          {canApprove ? (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => handleApproveDispatchSlip(slip)}
-                                className="px-2.5 py-1 text-[11px] font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded transition flex items-center gap-1 cursor-pointer shadow-xs"
-                              >
-                                <ThumbsUp className="w-3 h-3" />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                onClick={() => handleRejectDispatchSlip(slip)}
-                                className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition flex items-center gap-1 cursor-pointer"
-                              >
-                                <ThumbsDown className="w-3 h-3" />
-                                <span>Reject</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 italic">
-                              {reason || 'Approval rights reserved to authorized supervisor'}
-                            </span>
-                          )}
+                          {/* Inline Confirmation for Approve Dispatch */}
+                          {confirmingDispatchAction?.slipId === slip.id &&
+                            confirmingDispatchAction.type === 'approve' && (
+                              <div className="bg-emerald-50 border border-emerald-200 rounded-md p-2 flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[11px] font-semibold text-emerald-950">
+                                  Confirm official approval for Dispatch Slip {slip.ctrlNo}?
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmingDispatchAction(null)}
+                                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmingDispatchAction(null);
+                                      handleApproveDispatchSlip(slip);
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded cursor-pointer"
+                                  >
+                                    Confirm Approval
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Inline Confirmation & Reason Input for Reject Dispatch */}
+                          {confirmingDispatchAction?.slipId === slip.id &&
+                            confirmingDispatchAction.type === 'reject' && (
+                              <div className="bg-rose-50 border border-rose-200 rounded-md p-2.5 space-y-2">
+                                <span className="text-[11px] font-semibold text-rose-950 block">
+                                  Enter reason for rejecting Dispatch Slip {slip.ctrlNo}:
+                                </span>
+                                <input
+                                  type="text"
+                                  value={rejectDispatchReason}
+                                  onChange={(e) => setRejectDispatchReason(e.target.value)}
+                                  placeholder="e.g., Incomplete itinerary or conflicting schedule..."
+                                  className="w-full text-xs bg-white border border-rose-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-rose-600"
+                                />
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmingDispatchAction(null);
+                                      setRejectDispatchReason('');
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-100 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!rejectDispatchReason.trim()}
+                                    onClick={() => handleRejectDispatchSlip(slip, rejectDispatchReason)}
+                                    className="px-2.5 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded cursor-pointer disabled:opacity-50"
+                                  >
+                                    Confirm Reject
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                         </div>
                       )}
 

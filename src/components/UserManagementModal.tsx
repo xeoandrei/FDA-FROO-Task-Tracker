@@ -74,6 +74,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [newCluster, setNewCluster] = useState<ClusterCode>('SLC');
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [confirmingUserAction, setConfirmingUserAction] = useState<{
+    userId: string;
+    type: 'approve' | 'toggle' | 'delete';
+  } | null>(null);
+  const [isProcessingUserAction, setIsProcessingUserAction] = useState(false);
 
   if (!isOpen) return null;
 
@@ -85,9 +90,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleApproveUser = async (target: UserAccount) => {
     try {
+      setIsProcessingUserAction(true);
       await api.approveUser(target.id);
     } catch (err: any) {
       console.warn('Backend approve notice:', err.message);
+    } finally {
+      setIsProcessingUserAction(false);
+      setConfirmingUserAction(null);
     }
 
     const updated: UserAccount[] = users.map((u) =>
@@ -110,16 +119,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleToggleStatus = async (target: UserAccount) => {
     if (target.email.toLowerCase() === SUPERADMIN_EMAIL) {
-      alert('The primary Superadmin account cannot be deactivated.');
       return;
     }
 
     const nextStatus: AccountStatus = target.status === 'active' ? 'deactivated' : 'active';
 
     try {
+      setIsProcessingUserAction(true);
       await api.updateUserStatus(target.id, nextStatus as 'active' | 'deactivated');
     } catch (err: any) {
       console.warn('Backend status update note:', err.message);
+    } finally {
+      setIsProcessingUserAction(false);
+      setConfirmingUserAction(null);
     }
 
     const updated: UserAccount[] = users.map((u) =>
@@ -140,23 +152,17 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleDeleteUser = async (target: UserAccount) => {
     if (target.email.toLowerCase() === SUPERADMIN_EMAIL) {
-      alert('The primary Superadmin account cannot be deleted.');
-      return;
-    }
-
-    const isPending = target.status === 'pending';
-    const confirmMessage = isPending
-      ? `Are you sure you want to decline/reject registration for ${target.firstName} ${target.lastName} (${target.email})?`
-      : `Are you sure you want to permanently delete account ${target.firstName} ${target.lastName} (${target.email})?`;
-
-    if (!confirm(confirmMessage)) {
       return;
     }
 
     try {
+      setIsProcessingUserAction(true);
       await api.deleteUser(target.id);
     } catch (err: any) {
       console.warn('Backend user deletion notice:', err.message);
+    } finally {
+      setIsProcessingUserAction(false);
+      setConfirmingUserAction(null);
     }
 
     const updated = users.filter((u) => u.id !== target.id);
@@ -508,18 +514,66 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <div className="flex items-center justify-end gap-1.5">
                         {!isSuperadminAccount && (
                           <>
-                            {user.status === 'pending' ? (
+                            {confirmingUserAction?.userId === user.id ? (
+                              <div className="flex items-center justify-end gap-1.5 bg-slate-100 border border-slate-300 px-2 py-1 rounded-md animate-in fade-in duration-100">
+                                <span className="text-[10.5px] font-semibold text-slate-800 mr-1">
+                                  {confirmingUserAction.type === 'approve'
+                                    ? 'Approve & Send Email?'
+                                    : confirmingUserAction.type === 'toggle'
+                                    ? user.status === 'active'
+                                      ? 'Deactivate?'
+                                      : 'Reactivate?'
+                                    : user.status === 'pending'
+                                    ? 'Decline Account?'
+                                    : 'Delete Account?'}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={isProcessingUserAction}
+                                  onClick={() => setConfirmingUserAction(null)}
+                                  className="px-2 py-0.5 text-[10.5px] font-semibold text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isProcessingUserAction}
+                                  onClick={() => {
+                                    if (confirmingUserAction.type === 'approve') {
+                                      handleApproveUser(user);
+                                    } else if (confirmingUserAction.type === 'toggle') {
+                                      handleToggleStatus(user);
+                                    } else {
+                                      handleDeleteUser(user);
+                                    }
+                                  }}
+                                  className={`px-2 py-0.5 text-[10.5px] font-bold text-white rounded cursor-pointer disabled:opacity-50 ${
+                                    confirmingUserAction.type === 'approve'
+                                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                                      : confirmingUserAction.type === 'toggle'
+                                      ? 'bg-amber-600 hover:bg-amber-700'
+                                      : 'bg-rose-600 hover:bg-rose-700'
+                                  }`}
+                                >
+                                  {isProcessingUserAction ? '...' : 'Confirm'}
+                                </button>
+                              </div>
+                            ) : user.status === 'pending' ? (
                               <>
                                 <button
-                                  onClick={() => handleApproveUser(user)}
+                                  onClick={() =>
+                                    setConfirmingUserAction({ userId: user.id, type: 'approve' })
+                                  }
                                   className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-all shadow-xs flex items-center gap-1 cursor-pointer hover:scale-105"
-                                  title="Approve and Activate Staff Account"
+                                  title="Approve and Activate Staff Account (with confirmation)"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>Approve</span>
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteUser(user)}
+                                  onClick={() =>
+                                    setConfirmingUserAction({ userId: user.id, type: 'delete' })
+                                  }
                                   title="Decline/Reject Registration"
                                   className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
                                 >
@@ -529,9 +583,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             ) : (
                               <>
                                 <button
-                                  onClick={() => handleToggleStatus(user)}
+                                  onClick={() =>
+                                    setConfirmingUserAction({ userId: user.id, type: 'toggle' })
+                                  }
                                   title={user.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
-                                  className={`p-1.5 rounded transition-colors ${
+                                  className={`p-1.5 rounded transition-colors cursor-pointer ${
                                     user.status === 'active'
                                       ? 'text-amber-600 hover:bg-amber-50'
                                       : 'text-emerald-600 hover:bg-emerald-50'
@@ -540,7 +596,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   {user.status === 'active' ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteUser(user)}
+                                  onClick={() =>
+                                    setConfirmingUserAction({ userId: user.id, type: 'delete' })
+                                  }
                                   title="Delete Account"
                                   className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
                                 >
