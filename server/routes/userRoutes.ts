@@ -261,7 +261,7 @@ router.delete('/:id', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), as
 
     const [uRows]: [any[], any] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
     if (uRows.length === 0) {
-      return res.status(404).json({ error: 'User account not found' });
+      return res.json({ success: true, id, message: 'User deleted successfully' });
     }
     const targetUser = uRows[0];
 
@@ -269,22 +269,35 @@ router.delete('/:id', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), as
       return res.status(403).json({ error: 'The primary Superadmin root account cannot be deleted.' });
     }
 
+    // Safely detach any foreign key references on tasks, activity logs, and dispatch slips before deleting user
+    await pool.query('UPDATE tasks SET assigned_to_user_id = NULL WHERE assigned_to_user_id = ?', [id]);
+    await pool.query('UPDATE tasks SET received_by_user_id = NULL WHERE received_by_user_id = ?', [id]);
+    await pool.query('UPDATE tasks SET completed_by_user_id = NULL WHERE completed_by_user_id = ?', [id]);
+    await pool.query('UPDATE tasks SET created_by_user_id = NULL WHERE created_by_user_id = ?', [id]);
+    await pool.query('UPDATE task_activity_logs SET actor_user_id = NULL WHERE actor_user_id = ?', [id]);
+    await pool.query('UPDATE dispatch_slips SET created_by_user_id = NULL WHERE created_by_user_id = ?', [id]);
+    await pool.query('UPDATE dispatch_slips SET approved_by_user_id = NULL WHERE approved_by_user_id = ?', [id]);
+
     await pool.query('DELETE FROM users WHERE id = ?', [id]);
 
     if (req.user) {
-      await pool.query(
-        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          'USER_DELETED',
-          req.user.id,
-          req.user.email,
-          req.user.role,
-          `Administrator ${req.user.firstName} ${req.user.lastName} deleted staff account: ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}).`,
-          id,
-          `${targetUser.first_name} ${targetUser.last_name}`,
-        ]
-      );
+      try {
+        await pool.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            'USER_DELETED',
+            req.user.id,
+            req.user.email,
+            req.user.role,
+            `Administrator ${req.user.firstName} ${req.user.lastName} deleted staff account: ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}).`,
+            id,
+            `${targetUser.first_name} ${targetUser.last_name}`,
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('Audit log write warning on user delete:', auditErr);
+      }
     }
 
     res.json({ success: true, id, message: 'User deleted successfully' });

@@ -94,8 +94,14 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     message: string;
   } | null>(null);
 
+  // Inline delete confirmation state (avoids browser popup blockers)
+  const [isConfirmingDeleteTask, setIsConfirmingDeleteTask] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+
   useEffect(() => {
     setReminderFeedback(null);
+    setIsConfirmingDeleteTask(false);
+    setIsDeletingTask(false);
     if (task) {
       setEditDtn(task.dtn || '');
       setEditScheduledDate(task.scheduledDate || '');
@@ -516,7 +522,6 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   const handleDeleteDispatch = async (dispatchId: string) => {
-    if (!confirm('Are you sure you want to delete this dispatch slip?')) return;
     try {
       await api.deleteDispatch(dispatchId);
     } catch {
@@ -561,20 +566,59 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => onDeleteTask(task.id)}
-              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition"
+              type="button"
+              onClick={() => setIsConfirmingDeleteTask((prev) => !prev)}
+              className={`p-1.5 rounded-md transition cursor-pointer ${
+                isConfirmingDeleteTask
+                  ? 'text-rose-700 bg-rose-100'
+                  : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+              }`}
               title="Delete Task"
             >
               <Trash2 className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition"
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {/* Inline Delete Confirmation Banner */}
+        {isConfirmingDeleteTask && (
+          <div className="px-6 py-3 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-xs text-rose-900">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="font-semibold">
+                Permanently delete this task and all associated logs/dispatch slips?
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isDeletingTask}
+                onClick={() => setIsConfirmingDeleteTask(false)}
+                className="px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTask}
+                onClick={async () => {
+                  setIsDeletingTask(true);
+                  await onDeleteTask(task.id);
+                }}
+                className="px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md shadow-2xs transition cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingTask ? 'Deleting...' : 'Yes, Delete Task'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-600">

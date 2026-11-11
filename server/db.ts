@@ -483,11 +483,23 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
   if (normalizedSql.startsWith('DELETE FROM tasks WHERE id = ?')) {
     const taskId = params[0];
     const before = fallbackStore.tasks.length;
+    const slipIds = fallbackStore.dispatch_slips.filter((d) => d.task_id === taskId).map((d) => d.id);
+    fallbackStore.dispatch_slip_destinations = fallbackStore.dispatch_slip_destinations.filter(
+      (dest) => !slipIds.includes(dest.dispatch_slip_id)
+    );
+    fallbackStore.dispatch_slips = fallbackStore.dispatch_slips.filter((d) => d.task_id !== taskId);
+    fallbackStore.task_activity_logs = fallbackStore.task_activity_logs.filter((a) => a.task_id !== taskId);
     fallbackStore.tasks = fallbackStore.tasks.filter((t) => t.id !== taskId);
     return [{ affectedRows: before - fallbackStore.tasks.length }, []] as any;
   }
 
   // 18. TASK ACTIVITY LOGS
+  if (normalizedSql.startsWith('DELETE FROM task_activity_logs WHERE task_id = ?')) {
+    const taskId = params[0];
+    const before = fallbackStore.task_activity_logs.length;
+    fallbackStore.task_activity_logs = fallbackStore.task_activity_logs.filter((a) => a.task_id !== taskId);
+    return [{ affectedRows: before - fallbackStore.task_activity_logs.length }, []] as any;
+  }
   if (normalizedSql.includes('FROM task_activity_logs WHERE task_id = ?')) {
     const taskId = params[0];
     const list = fallbackStore.task_activity_logs
@@ -513,6 +525,11 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
   }
 
   // 19. DISPATCH SLIPS
+  if (normalizedSql.startsWith('SELECT id FROM dispatch_slips WHERE task_id = ?')) {
+    const taskId = params[0];
+    const list = fallbackStore.dispatch_slips.filter((d) => d.task_id === taskId).map((d) => ({ id: d.id }));
+    return [list, []];
+  }
   if (normalizedSql.includes('FROM dispatch_slips') && normalizedSql.includes('WHERE d.task_id = ?')) {
     const taskId = params[0];
     const list = fallbackStore.dispatch_slips.filter((d) => d.task_id === taskId);
@@ -522,6 +539,50 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     const id = params[0];
     const found = fallbackStore.dispatch_slips.find((d) => d.id === id);
     return [found ? [found] : [], []];
+  }
+  if (normalizedSql.startsWith('UPDATE dispatch_slips SET status = ?')) {
+    const nextStatus = params[0];
+    const approverId = params[1];
+    const id = params[2];
+    const found = fallbackStore.dispatch_slips.find((d) => d.id === id);
+    if (found) {
+      found.status = nextStatus;
+      found.approved_by_user_id = approverId;
+    }
+    return [{ affectedRows: found ? 1 : 0 }, []] as any;
+  }
+  if (normalizedSql.startsWith("UPDATE dispatch_slips SET status = 'Rejected'")) {
+    const reason = params[0];
+    const id = params[1];
+    const found = fallbackStore.dispatch_slips.find((d) => d.id === id);
+    if (found) {
+      found.status = 'Rejected';
+      found.rejection_reason = reason;
+    }
+    return [{ affectedRows: found ? 1 : 0 }, []] as any;
+  }
+  if (normalizedSql.startsWith('DELETE FROM dispatch_slips WHERE task_id = ?')) {
+    const taskId = params[0];
+    const before = fallbackStore.dispatch_slips.length;
+    fallbackStore.dispatch_slips = fallbackStore.dispatch_slips.filter((d) => d.task_id !== taskId);
+    return [{ affectedRows: before - fallbackStore.dispatch_slips.length }, []] as any;
+  }
+  if (normalizedSql.startsWith('DELETE FROM dispatch_slips WHERE id = ?')) {
+    const id = params[0];
+    const before = fallbackStore.dispatch_slips.length;
+    fallbackStore.dispatch_slip_destinations = fallbackStore.dispatch_slip_destinations.filter(
+      (dest) => dest.dispatch_slip_id !== id
+    );
+    fallbackStore.dispatch_slips = fallbackStore.dispatch_slips.filter((d) => d.id !== id);
+    return [{ affectedRows: before - fallbackStore.dispatch_slips.length }, []] as any;
+  }
+  if (normalizedSql.startsWith('DELETE FROM dispatch_slip_destinations WHERE dispatch_slip_id = ?')) {
+    const slipId = params[0];
+    const before = fallbackStore.dispatch_slip_destinations.length;
+    fallbackStore.dispatch_slip_destinations = fallbackStore.dispatch_slip_destinations.filter(
+      (dest) => dest.dispatch_slip_id !== slipId
+    );
+    return [{ affectedRows: before - fallbackStore.dispatch_slip_destinations.length }, []] as any;
   }
   if (normalizedSql.startsWith('INSERT INTO dispatch_slips')) {
     const id = params[0];

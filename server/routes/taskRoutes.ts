@@ -778,39 +778,68 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
 
 // DELETE /api/tasks/:id
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const connection = await pool.getConnection();
   try {
     const { id } = req.params;
     const user = req.user;
 
-    const [rows]: [any[], any] = await pool.query('SELECT * FROM tasks WHERE id = ?', [id]);
+    const [rows]: [any[], any] = await connection.query('SELECT * FROM tasks WHERE id = ?', [id]);
     if (rows.length === 0) {
-      return res.status(404).json({ error: 'Task not found' });
+      // Idempotent success if task is already deleted from MySQL
+      return res.json({ success: true, message: 'Task deleted successfully' });
     }
 
     const task = rows[0];
 
-    await pool.query('DELETE FROM tasks WHERE id = ?', [id]);
+    await connection.beginTransaction();
 
-    if (user) {
-      await pool.query(
-        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          'TASK_DELETED',
-          user.id,
-          user.email,
-          user.role,
-          `Deleted operational task "${task.task_title}" (${task.region}).`,
-          id,
-          task.task_title,
-        ]
-      );
+    // 1. Delete dispatch slip destinations for any dispatch slips belonging to this task
+    const [slipRows]: [any[], any] = await connection.query(
+      'SELECT id FROM dispatch_slips WHERE task_id = ?',
+      [id]
+    );
+    for (const s of slipRows) {
+      await connection.query('DELETE FROM dispatch_slip_destinations WHERE dispatch_slip_id = ?', [s.id]);
     }
 
+    // 2. Delete dispatch slips belonging to this task
+    await connection.query('DELETE FROM dispatch_slips WHERE task_id = ?', [id]);
+
+    // 3. Delete activity logs belonging to this task
+    await connection.query('DELETE FROM task_activity_logs WHERE task_id = ?', [id]);
+
+    // 4. Delete the task itself
+    await connection.query('DELETE FROM tasks WHERE id = ?', [id]);
+
+    if (user) {
+      try {
+        const validActorId = await resolveValidUserId(connection, user.id);
+        await connection.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            'TASK_DELETED',
+            validActorId,
+            user.email,
+            user.role,
+            `Deleted operational task "${task.task_title}" (${task.region}).`,
+            id,
+            task.task_title,
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('Audit log write warning on task delete:', auditErr);
+      }
+    }
+
+    await connection.commit();
     res.json({ success: true, message: 'Task deleted successfully' });
   } catch (error) {
+    await connection.rollback();
     console.error('Delete task error:', error);
-    res.status(500).json({ error: 'Failed to delete task' });
+    res.status(500).json({ error: 'Failed to delete task from database' });
+  } finally {
+    connection.release();
   }
 });
 

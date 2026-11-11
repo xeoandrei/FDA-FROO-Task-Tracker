@@ -78,56 +78,12 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Helper to synchronize local and backend tasks so created tasks never disappear on logout/login
+  // Authoritative deduplicated task list from backend database (never resurrect deleted tasks from localStorage)
   const syncTasksFromBackend = async (remoteTasks: Task[]): Promise<Task[]> => {
-    const localTasks = getStoredTasks();
-    const unsyncedLocal = localTasks.filter(
-      (lt) =>
-        !remoteTasks.some(
-          (rt) =>
-            rt.id === lt.id ||
-            (rt.taskTitle.trim().toLowerCase() === lt.taskTitle.trim().toLowerCase() &&
-              rt.assignedTo.trim().toLowerCase() === lt.assignedTo.trim().toLowerCase() &&
-              rt.dueDate === lt.dueDate)
-        )
-    );
-
-    const syncedExtras: Task[] = [];
-    if (unsyncedLocal.length > 0 && getAuthToken()) {
-      for (const lt of unsyncedLocal) {
-        try {
-          const created = await api.createTask({
-            taskTitle: lt.taskTitle,
-            category: lt.category,
-            origin: lt.origin,
-            originDetails: lt.originDetails,
-            assignedTo: lt.assignedTo,
-            region: lt.region,
-            dueDate: lt.dueDate,
-            scheduledDate: lt.scheduledDate,
-            location: lt.location,
-            description: lt.description,
-            priority: lt.priority,
-            dtn: lt.dtn,
-          });
-          if (created) {
-            syncedExtras.push(created);
-          } else {
-            syncedExtras.push(lt);
-          }
-        } catch {
-          syncedExtras.push(lt);
-        }
-      }
-    } else if (unsyncedLocal.length > 0) {
-      syncedExtras.push(...unsyncedLocal);
-    }
-
-    const combined = [...syncedExtras, ...remoteTasks];
     const seenIds = new Set<string>();
     const deduplicated: Task[] = [];
-    for (const item of combined) {
-      if (!seenIds.has(item.id)) {
+    for (const item of remoteTasks) {
+      if (item && item.id && !seenIds.has(item.id)) {
         seenIds.add(item.id);
         deduplicated.push(item);
       }
@@ -519,32 +475,30 @@ export default function App() {
 
   // Delete task
   const handleDeleteTask = async (taskId: string) => {
-    if (confirm('Are you sure you want to delete this task?')) {
-      const target = tasks.find((t) => t.id === taskId);
-      try {
-        await api.deleteTask(taskId);
-      } catch (err: any) {
-        console.warn('Backend delete task notice:', err.message);
-      }
+    const target = tasks.find((t) => t.id === taskId);
+    try {
+      await api.deleteTask(taskId);
+    } catch (err: any) {
+      console.warn('Backend delete task notice:', err.message);
+    }
 
-      setTasks((prev) => {
-        const next = prev.filter((t) => t.id !== taskId);
-        saveStoredTasks(next);
-        return next;
-      });
-      if (selectedTask?.id === taskId) {
-        setSelectedTask(null);
-      }
-      showToast('Task deleted successfully.');
+    setTasks((prev) => {
+      const next = prev.filter((t) => t.id !== taskId);
+      saveStoredTasks(next);
+      return next;
+    });
+    if (selectedTask?.id === taskId) {
+      setSelectedTask(null);
+    }
+    showToast('Task deleted permanently.');
 
-      if (currentUser && target) {
-        logSystemAction(
-          'TASK_DELETED',
-          currentUser,
-          `Deleted operational task: "${target.taskTitle}" (${target.region}).`,
-          { targetEntityId: taskId, targetEntityName: target.taskTitle }
-        );
-      }
+    if (currentUser && target) {
+      logSystemAction(
+        'TASK_DELETED',
+        currentUser,
+        `Deleted operational task: "${target.taskTitle}" (${target.region}).`,
+        { targetEntityId: taskId, targetEntityName: target.taskTitle }
+      );
     }
   };
 

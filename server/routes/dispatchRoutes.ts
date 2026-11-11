@@ -325,6 +325,7 @@ router.post('/dispatches/:id/reject', authenticateToken, async (req: Authenticat
 router.delete('/dispatches/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
+    await pool.query('DELETE FROM dispatch_slip_destinations WHERE dispatch_slip_id = ?', [id]);
     await pool.query('DELETE FROM dispatch_slips WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (error) {
