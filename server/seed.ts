@@ -330,12 +330,12 @@ export async function runAutoSeed(): Promise<void> {
       }
     }
 
-    // 5. Only seed the primary Superadmin if the users table is completely empty (do not add extra demo users)
+    // 5. Ensure primary Superadmin and the standard "Admin" account exist in MySQL
     const [userRows]: [any[], any] = await connection.query('SELECT COUNT(*) as count FROM users');
     const userCount = userRows[0]?.count || 0;
+    const defaultPasswordHash = await hashPassword('password123');
 
     if (userCount === 0) {
-      const defaultPasswordHash = await hashPassword('password123');
       await connection.query(
         `INSERT INTO users (id, username, email, password_hash, first_name, middle_initial, last_name, position, role_code, office_code, cluster_code, is_active, last_activity)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,

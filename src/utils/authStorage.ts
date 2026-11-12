@@ -74,11 +74,16 @@ export function getStoredUsers(): UserAccount[] {
           };
         })
       );
-      // Ensure superadmin always exists
-      const hasSuper = normalized.some((u: UserAccount) => u.email.toLowerCase() === SUPERADMIN_EMAIL);
-      if (!hasSuper) {
-        const superUser = INITIAL_USERS[0];
-        const combined = deduplicateUsers([superUser, ...normalized]);
+      // Ensure baseline accounts (Superadmin and Admin standard account) always exist
+      const missingBaseline = INITIAL_USERS.filter(
+        (baseUser) =>
+          !normalized.some(
+            (u: UserAccount) =>
+              u.id === baseUser.id || u.email.toLowerCase() === baseUser.email.toLowerCase()
+          )
+      );
+      if (missingBaseline.length > 0) {
+        const combined = deduplicateUsers([...normalized, ...missingBaseline]);
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(combined));
         return combined;
       }

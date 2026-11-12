@@ -12,6 +12,7 @@ const databaseConfig: mysql.PoolOptions = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  connectTimeout: 2000,
   ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
 };
 
@@ -179,6 +180,15 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
   }
 
   // 5. USERS: Email / Username Duplicate Check
+  if (normalizedSql.includes("WHERE id = 'usr-standard-admin'")) {
+    const found = fallbackStore.users.find(
+      (u) =>
+        u.id === 'usr-standard-admin' ||
+        (u.username || '').toLowerCase() === 'admin' ||
+        u.email.toLowerCase() === 'admin@fda.gov.ph'
+    );
+    return [found ? [{ id: found.id }] : [], []];
+  }
   if (normalizedSql.includes('SELECT id FROM users WHERE LOWER(email) = ?')) {
     const targetEmail = String(params[0] || '').toLowerCase();
     const found = fallbackStore.users.find((u) => u.email.toLowerCase() === targetEmail);

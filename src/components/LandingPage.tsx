@@ -510,6 +510,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                   <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO - Field Inspector)</option>
                   <option value="Licensing Officer">Licensing Officer</option>
                   <option value="Information Officer">Information Officer</option>
+                  <option value="Administrative">Administrative</option>
                   <option value="Regional Supervisor">Regional Supervisor</option>
                 </select>
               </div>

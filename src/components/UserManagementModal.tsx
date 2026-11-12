@@ -726,6 +726,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO)</option>
                     <option value="Licensing Officer">Licensing Officer</option>
                     <option value="Information Officer">Information Officer</option>
+                    <option value="Administrative">Administrative</option>
                     <option value="Regional Supervisor">Regional Supervisor</option>
                     <option value="Cluster Director">Cluster Director</option>
                     <option value="ODDG-FROO Staff">ODDG-FROO Staff (Admin)</option>

@@ -14,7 +14,8 @@ export type UserPosition =
   | 'Regional Supervisor'
   | 'Food-Drug Regulation Officer (FDRO)'
   | 'Licensing Officer'
-  | 'Information Officer';
+  | 'Information Officer'
+  | 'Administrative';
 
 export type ClusterCode = 'NLC' | 'SLC' | 'VC' | 'MEC' | 'MWC';
 
