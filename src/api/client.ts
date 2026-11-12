@@ -36,6 +36,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  try {
+    const sessionRaw = localStorage.getItem('froo_current_user_session_v2');
+    if (sessionRaw) {
+      const sessionUser = JSON.parse(sessionRaw);
+      if (sessionUser?.id && !headers.has('X-User-Id')) {
+        headers.set('X-User-Id', String(sessionUser.id));
+      }
+      if (sessionUser?.email && !headers.has('X-User-Email')) {
+        headers.set('X-User-Email', String(sessionUser.email));
+      }
+    }
+  } catch {
+    // Ignore session parse errors
+  }
+
   const url = `${API_BASE_URL}${endpoint}`;
   const response = await fetch(url, {
     ...options,

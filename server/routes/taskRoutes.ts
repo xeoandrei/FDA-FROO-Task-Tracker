@@ -225,7 +225,15 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       description,
       priority,
       dtn,
+      isManualCreate,
     } = req.body;
+
+    // Block legacy background localStorage sync from re-creating deleted tasks or overwriting createdBy
+    if (!isManualCreate) {
+      return res.status(400).json({
+        error: 'Automated background task sync is disabled to prevent resurrecting deleted tasks.',
+      });
+    }
 
     const cleanDtn = dtn ? String(dtn).trim() : 'N/A';
 

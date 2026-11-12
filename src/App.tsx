@@ -115,6 +115,9 @@ export default function App() {
             if (isMounted) {
               setTasks(merged);
               saveStoredTasks(merged);
+              setSelectedTask((prev) =>
+                prev ? merged.find((t) => t.id === prev.id) || null : null
+              );
             }
           }
         } else {
@@ -126,10 +129,20 @@ export default function App() {
     }
 
     checkAndSync();
+
+    // Keep browsers synced with MySQL whenever the tab regains focus
+    const handleWindowFocus = () => {
+      if (currentUser) {
+        checkAndSync();
+      }
+    };
+    window.addEventListener('focus', handleWindowFocus);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('focus', handleWindowFocus);
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Persist tasks whenever changed
   useEffect(() => {
@@ -427,6 +440,7 @@ export default function App() {
         description: newTask.description,
         priority: newTask.priority,
         dtn: newTask.dtn,
+        isManualCreate: true,
       });
 
       if (created) {
@@ -479,7 +493,9 @@ export default function App() {
     try {
       await api.deleteTask(taskId);
     } catch (err: any) {
-      console.warn('Backend delete task notice:', err.message);
+      console.error('Backend delete task error:', err.message);
+      showToast(`Unable to delete task: ${err.message || 'Server error'}`);
+      return;
     }
 
     setTasks((prev) => {
@@ -490,6 +506,19 @@ export default function App() {
     if (selectedTask?.id === taskId) {
       setSelectedTask(null);
     }
+
+    // Re-fetch authoritative task list from MySQL backend to guarantee synchronization
+    try {
+      const remoteTasks = await api.getTasks();
+      if (Array.isArray(remoteTasks)) {
+        const merged = await syncTasksFromBackend(remoteTasks);
+        setTasks(merged);
+        saveStoredTasks(merged);
+      }
+    } catch {
+      // Keep local filtered state
+    }
+
     showToast('Task deleted permanently.');
 
     if (currentUser && target) {

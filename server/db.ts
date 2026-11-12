@@ -244,6 +244,16 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     const found = fallbackStore.users.find((u) => u.id === targetId);
     return [found ? [found] : [], []];
   }
+  if (normalizedSql.includes('WHERE (LOWER(email) = ?')) {
+    const targetEmail = String(params[0] || '').toLowerCase();
+    const targetId = String(params[2] || '');
+    const found = fallbackStore.users.find(
+      (u) =>
+        (targetEmail && u.email.toLowerCase() === targetEmail) ||
+        (targetId && u.id === targetId)
+    );
+    return [found ? [found] : [], []];
+  }
 
   // 9. USERS: Update status (approve / deactivate / activate)
   if (normalizedSql.startsWith('UPDATE users SET is_active = ?')) {

@@ -2,21 +2,32 @@ import { Task, FrooUserPersona } from '../types/task';
 import { INITIAL_TASKS } from '../data/initialTasks';
 import { DEFAULT_PERSONAS } from '../data/offices';
 
-const TASKS_STORAGE_KEY = 'froo_task_tracker_data_v2';
+const TASKS_STORAGE_KEY = 'froo_task_tracker_mysql_cache_v4';
 const PERSONA_STORAGE_KEY = 'froo_task_tracker_current_persona_v1';
+
+// Purge legacy localStorage task keys so old cached tasks can never resurrect
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('froo_task_tracker_data_v1');
+    localStorage.removeItem('froo_task_tracker_data_v2');
+    localStorage.removeItem('froo_task_tracker_data_v3');
+  }
+} catch {
+  // Ignore storage errors
+}
 
 export function getStoredTasks(): Task[] {
   try {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY);
-    if (!raw) return INITIAL_TASKS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       return parsed;
     }
-    return INITIAL_TASKS;
+    return [];
   } catch (e) {
     console.error('Failed to read tasks from localStorage', e);
-    return INITIAL_TASKS;
+    return [];
   }
 }
 
@@ -34,7 +45,7 @@ export function resetStoredTasks(): Task[] {
   } catch (e) {
     console.error('Failed to reset tasks', e);
   }
-  return INITIAL_TASKS;
+  return [];
 }
 
 export function getStoredPersona(): FrooUserPersona {
