@@ -44,11 +44,14 @@ export interface UserAccount {
   createdAt: string;
   lastLogin?: string;
   lastActivity?: string;
+  hasActiveSession?: boolean;
 }
 
 export type SystemActionType =
   | 'USER_LOGIN'
   | 'USER_LOGOUT'
+  | 'SESSION_TIMEOUT'
+  | 'SESSION_REPLACED'
   | 'USER_REGISTERED'
   | 'USER_APPROVED'
   | 'USER_STATUS_CHANGED'

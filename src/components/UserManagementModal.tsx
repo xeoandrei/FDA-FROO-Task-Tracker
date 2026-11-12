@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Clock,
   Building,
+  LogOut,
 } from 'lucide-react';
 import { UserAccount, UserPosition, UserRole, ClusterCode, AccountStatus } from '../types/auth';
 import { FROO_OFFICES } from '../data/offices';
@@ -76,7 +77,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [confirmingUserAction, setConfirmingUserAction] = useState<{
     userId: string;
-    type: 'approve' | 'toggle' | 'delete';
+    type: 'approve' | 'toggle' | 'delete' | 'force-logout';
   } | null>(null);
   const [isProcessingUserAction, setIsProcessingUserAction] = useState(false);
 
@@ -174,6 +175,39 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       'USER_DELETED',
       currentUser,
       `Deleted FDA user account: ${target.firstName} ${target.lastName} (${target.email}).`,
+      { targetEntityId: target.id, targetEntityName: target.email }
+    );
+  };
+
+  const handleForceLogoutUser = async (target: UserAccount) => {
+    try {
+      setIsProcessingUserAction(true);
+      await api.forceLogoutUser(target.id);
+    } catch (err: any) {
+      console.warn('Backend force logout notice:', err.message);
+    } finally {
+      setIsProcessingUserAction(false);
+      setConfirmingUserAction(null);
+    }
+
+    const updated: UserAccount[] = users.map((u) =>
+      u.id === target.id
+        ? {
+            ...u,
+            hasActiveSession: false,
+            lastActivity: 'Session terminated by Administrator',
+          }
+        : u
+    );
+
+    saveStoredUsers(updated);
+    setUsers(updated);
+    onUserListChanged();
+
+    logSystemAction(
+      'USER_LOGOUT',
+      currentUser,
+      `Administrator force-terminated active session of ${target.firstName} ${target.lastName} (${target.email}).`,
       { targetEntityId: target.id, targetEntityName: target.email }
     );
   };
@@ -502,7 +536,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-slate-500 text-[11px]">
-                      <div>{user.lastLogin || 'Never logged in'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span>{user.lastLogin || 'Never logged in'}</span>
+                        {user.hasActiveSession && user.status === 'active' && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                            Online
+                          </span>
+                        )}
+                      </div>
                       {user.lastActivity && (
                         <div className={`text-[10px] truncate max-w-[170px] ${user.status === 'pending' ? 'text-amber-700 font-medium' : 'text-slate-400'}`}>
                           {user.lastActivity}
@@ -519,6 +561,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 <span className="text-[10.5px] font-semibold text-slate-800 mr-1">
                                   {confirmingUserAction.type === 'approve'
                                     ? 'Approve & Send Email?'
+                                    : confirmingUserAction.type === 'force-logout'
+                                    ? 'Force Logout Session?'
                                     : confirmingUserAction.type === 'toggle'
                                     ? user.status === 'active'
                                       ? 'Deactivate?'
@@ -541,6 +585,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   onClick={() => {
                                     if (confirmingUserAction.type === 'approve') {
                                       handleApproveUser(user);
+                                    } else if (confirmingUserAction.type === 'force-logout') {
+                                      handleForceLogoutUser(user);
                                     } else if (confirmingUserAction.type === 'toggle') {
                                       handleToggleStatus(user);
                                     } else {
@@ -550,7 +596,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   className={`px-2 py-0.5 text-[10.5px] font-bold text-white rounded cursor-pointer disabled:opacity-50 ${
                                     confirmingUserAction.type === 'approve'
                                       ? 'bg-emerald-600 hover:bg-emerald-700'
-                                      : confirmingUserAction.type === 'toggle'
+                                      : confirmingUserAction.type === 'toggle' ||
+                                        confirmingUserAction.type === 'force-logout'
                                       ? 'bg-amber-600 hover:bg-amber-700'
                                       : 'bg-rose-600 hover:bg-rose-700'
                                   }`}
@@ -582,6 +629,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               </>
                             ) : (
                               <>
+                                {user.status === 'active' && user.id !== currentUser.id && (
+                                  <button
+                                    onClick={() =>
+                                      setConfirmingUserAction({
+                                        userId: user.id,
+                                        type: 'force-logout',
+                                      })
+                                    }
+                                    title="Force Sign Out Active Session"
+                                    className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                                  >
+                                    <LogOut className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     setConfirmingUserAction({ userId: user.id, type: 'toggle' })

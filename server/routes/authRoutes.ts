@@ -263,11 +263,13 @@ router.post('/demo-login', async (req, res) => {
       return res.status(403).json({ error: 'This demo account is currently deactivated.' });
     }
 
-    // Update last login in MySQL
-    await pool.query('UPDATE users SET last_login_at = NOW(), last_activity = ? WHERE id = ?', [
-      'Active in demo session',
-      userRow.id,
-    ]);
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    // Update last login and bind single active session in MySQL
+    await pool.query(
+      'UPDATE users SET last_login_at = NOW(), last_activity = ?, active_session_id = ?, session_updated_at = NOW() WHERE id = ?',
+      ['Active in demo session', sessionId, userRow.id]
+    );
 
     const tokenPayload = {
       id: userRow.id,
@@ -276,6 +278,7 @@ router.post('/demo-login', async (req, res) => {
       office: userRow.office_code,
       firstName: userRow.first_name,
       lastName: userRow.last_name,
+      sessionId,
     };
 
     const token = generateToken(tokenPayload);
@@ -313,7 +316,7 @@ router.post('/demo-login', async (req, res) => {
       console.warn('Audit log write warning:', auditErr);
     }
 
-    res.json({ token, user });
+    res.json({ token, sessionId, user });
   } catch (error) {
     console.error('Demo login error:', error);
     res.status(500).json({ error: 'Failed to authenticate demo session' });
@@ -334,6 +337,7 @@ router.post('/login', async (req, res) => {
     const [rows]: [any[], any] = await pool.query(
       `SELECT u.id, u.username, u.email, u.password_hash, u.first_name, u.middle_initial, u.last_name,
               u.position, u.role_code, u.office_code, u.cluster_code, u.is_active, u.last_login_at, u.last_activity,
+              u.active_session_id, u.session_updated_at,
               o.office_name, r.role_name
        FROM users u
        LEFT JOIN offices o ON u.office_code = o.office_code
@@ -362,11 +366,19 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email/username or password' });
     }
 
-    // Update last login timestamp
-    await pool.query('UPDATE users SET last_login_at = NOW(), last_activity = ? WHERE id = ?', [
-      'Active in session',
-      userRow.id,
-    ]);
+    const previousSessionId = userRow.active_session_id ? String(userRow.active_session_id).trim() : '';
+    const hadPreviousActiveSession =
+      Boolean(previousSessionId) &&
+      previousSessionId !== 'SIGNED_OUT' &&
+      previousSessionId !== 'FORCED_LOGOUT';
+
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    // Update last login timestamp and overwrite active_session_id (kicks any previous device/browser session)
+    await pool.query(
+      'UPDATE users SET last_login_at = NOW(), last_activity = ?, active_session_id = ?, session_updated_at = NOW() WHERE id = ?',
+      ['Active in session', sessionId, userRow.id]
+    );
 
     const isSuper = userRow.id === 'usr-superadmin' || (userRow.email && userRow.email.toLowerCase() === 'amldelgado@fda.gov.ph');
     const resolvedFirstName = isSuper ? 'Andrei Manuel' : userRow.first_name;
@@ -382,6 +394,7 @@ router.post('/login', async (req, res) => {
       office: userRow.office_code,
       firstName: resolvedFirstName,
       lastName: resolvedLastName,
+      sessionId,
     };
 
     const token = generateToken(tokenPayload);
@@ -412,6 +425,19 @@ router.post('/login', async (req, res) => {
 
     // Log to system_audit_logs
     try {
+      if (hadPreviousActiveSession) {
+        await pool.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            'SESSION_REPLACED',
+            user.id,
+            user.email,
+            user.role,
+            `Concurrent login limit enforced for ${user.firstName} ${user.lastName}: previous active session on another browser/device was terminated.`,
+          ]
+        );
+      }
       await pool.query(
         `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description)
          VALUES (?, ?, ?, ?, ?)`,
@@ -421,7 +447,7 @@ router.post('/login', async (req, res) => {
       console.warn('Audit log write warning:', auditErr);
     }
 
-    res.json({ token, user });
+    res.json({ token, sessionId, user, displacedPreviousSession: hadPreviousActiveSession });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server authentication error' });
@@ -539,4 +565,56 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// GET /api/auth/session-check - Lightweight heartbeat & single-device concurrency check
+router.get('/session-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  res.json({
+    valid: true,
+    sessionId: req.user?.sessionId || null,
+    serverTime: new Date().toISOString(),
+  });
+});
+
+// POST /api/auth/logout - Explicitly end current session or record 30-minute idle timeout
+router.post('/logout', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.user;
+    const reason = req.body?.reason === 'IDLE_TIMEOUT' ? 'IDLE_TIMEOUT' : 'MANUAL';
+
+    if (user?.id) {
+      const activityText =
+        reason === 'IDLE_TIMEOUT'
+          ? 'Session timed out (30m inactivity)'
+          : 'Signed out of system';
+      await pool.query(
+        `UPDATE users SET active_session_id = 'SIGNED_OUT', last_activity = ? WHERE id = ?`,
+        [activityText, user.id]
+      );
+
+      try {
+        await pool.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            reason === 'IDLE_TIMEOUT' ? 'SESSION_TIMEOUT' : 'USER_LOGOUT',
+            user.id,
+            user.email,
+            user.role,
+            reason === 'IDLE_TIMEOUT'
+              ? `Session for ${user.firstName} ${user.lastName} automatically timed out after 30 minutes of inactivity.`
+              : `User ${user.firstName} ${user.lastName} signed out of the system.`,
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('Audit log write warning on logout:', auditErr);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Failed to complete sign out' });
+  }
+});
+
 export default router;
+

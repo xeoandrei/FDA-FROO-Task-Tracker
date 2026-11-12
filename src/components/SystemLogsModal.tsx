@@ -132,6 +132,9 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
       case 'USER_REGISTERED':
       case 'USER_STATUS_CHANGED':
         return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'SESSION_TIMEOUT':
+      case 'SESSION_REPLACED':
+        return 'bg-amber-50 text-amber-800 border-amber-300';
       default:
         return 'bg-slate-50 text-slate-700 border-slate-200';
     }
@@ -219,6 +222,9 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
               <option value="DISPATCH_APPROVED">Dispatch Approved</option>
               <option value="DISPATCH_REJECTED">Dispatch Rejected</option>
               <option value="USER_LOGIN">User Login</option>
+              <option value="USER_LOGOUT">User Logout</option>
+              <option value="SESSION_TIMEOUT">Session Idle Timeout</option>
+              <option value="SESSION_REPLACED">Concurrent Session Replaced</option>
               <option value="USER_REGISTERED">User Registered</option>
               <option value="USER_STATUS_CHANGED">User Status Changed</option>
             </select>

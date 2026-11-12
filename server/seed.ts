@@ -70,6 +70,8 @@ export async function runAutoSeed(): Promise<void> {
           is_active TINYINT(1) NOT NULL DEFAULT 1,
           last_login_at DATETIME NULL,
           last_activity VARCHAR(255) NULL,
+          active_session_id VARCHAR(64) NULL,
+          session_updated_at DATETIME NULL,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           PRIMARY KEY (id),
@@ -280,6 +282,20 @@ export async function runAutoSeed(): Promise<void> {
     }
     if (colSet.size > 0 && !colSet.has('last_activity')) {
       await connection.query(`ALTER TABLE users ADD COLUMN last_activity VARCHAR(255) NULL AFTER last_login_at`);
+    }
+    if (colSet.size > 0 && !colSet.has('active_session_id')) {
+      try {
+        await connection.query(`ALTER TABLE users ADD COLUMN active_session_id VARCHAR(64) NULL AFTER last_activity`);
+      } catch {
+        // Ignore if column already exists
+      }
+    }
+    if (colSet.size > 0 && !colSet.has('session_updated_at')) {
+      try {
+        await connection.query(`ALTER TABLE users ADD COLUMN session_updated_at DATETIME NULL AFTER active_session_id`);
+      } catch {
+        // Ignore if column already exists
+      }
     }
 
     // 4b. Ensure tasks table supports multiple assignees (assigned_to_names), multiple regions, N/A DTNs, and Normal/Urgent priorities

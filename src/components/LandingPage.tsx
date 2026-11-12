@@ -31,14 +31,17 @@ import {
   logSystemAction,
   SUPERADMIN_EMAIL,
 } from '../utils/authStorage';
-import { api } from '../api/client';
+import { api, getSessionLogoutReason, setSessionLogoutReason } from '../api/client';
 
 interface LandingPageProps {
   onLoginSuccess: (user: UserAccount) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
-  const [activeModal, setActiveModal] = useState<'none' | 'login' | 'register'>('none');
+  const [sessionNotice, setSessionNotice] = useState<string | null>(() => getSessionLogoutReason());
+  const [activeModal, setActiveModal] = useState<'none' | 'login' | 'register'>(() =>
+    getSessionLogoutReason() ? 'login' : 'none'
+  );
 
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState(''); // username or email
@@ -60,6 +63,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
   const [regError, setRegError] = useState<string | null>(null);
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
 
+  const dismissSessionNotice = () => {
+    setSessionNotice(null);
+    setSessionLogoutReason(null);
+  };
+
   // Handle Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +82,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
     try {
       const res = await api.login(identifier, loginPassword);
       if (res && res.user) {
+        dismissSessionNotice();
         setCurrentUser(res.user);
         onLoginSuccess(res.user);
         return;
@@ -315,6 +324,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                 ✕
               </button>
             </div>
+
+            {sessionNotice && (
+              <div className="mb-4 p-3 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-100 text-xs flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-amber-300 mb-0.5">Session Security Notice</div>
+                    <span className="leading-relaxed">{sessionNotice}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissSessionNotice}
+                  className="text-amber-400 hover:text-white text-xs px-1"
+                  title="Dismiss notice"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {loginError && (
               <div className="mb-4 p-3 rounded-lg bg-red-950/70 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">

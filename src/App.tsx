@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Task, TaskStatus } from './types/task';
 import { UserAccount, UserRole, ClusterCode } from './types/auth';
 import {
@@ -36,6 +36,7 @@ import { SystemLogsModal } from './components/SystemLogsModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
 import { ReceiveTaskModal } from './components/ReceiveTaskModal';
+import { SessionTimeoutModal } from './components/SessionTimeoutModal';
 import {
   isUserAssignedToTask,
   isUserCreatedTask,
@@ -45,7 +46,10 @@ import {
 } from './utils/taskAuthorization';
 import { ActivityItem } from './types/task';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { api, setAuthToken, getAuthToken } from './api/client';
+import { api, setAuthToken, getAuthToken, setSessionId, setSessionLogoutReason } from './api/client';
+
+const IDLE_WARNING_SECONDS = 29 * 60; // 29 minutes (shows 60s countdown)
+const IDLE_LIMIT_SECONDS = 30 * 60; // 30 minutes total inactivity timeout
 
 export default function App() {
   // Current authenticated user session
@@ -73,10 +77,44 @@ export default function App() {
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Idle timeout tracking state
+  const lastActivityRef = useRef<number>(Date.now());
+  const [idleWarningRemaining, setIdleWarningRemaining] = useState<number | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const closeAllWorkspaceModals = useCallback(() => {
+    setIsCreateModalOpen(false);
+    setIsRegionalOverviewOpen(false);
+    setIsUserManagementOpen(false);
+    setIsSystemLogsOpen(false);
+    setIsChangePasswordOpen(false);
+    setSelectedTask(null);
+    setTaskToConfirmReceive(null);
+    setIdleWarningRemaining(null);
+  }, []);
+
+  const handleSessionInvalidated = useCallback(
+    (code: string, message: string, notifyBackendIdle = false) => {
+      if (notifyBackendIdle) {
+        api.logout('IDLE_TIMEOUT').catch(() => {});
+      }
+      if (currentUser) {
+        const logActionType = code === 'SESSION_IDLE_TIMEOUT' ? 'SESSION_TIMEOUT' : 'SESSION_REPLACED';
+        logSystemAction(logActionType, currentUser, message);
+      }
+      setSessionLogoutReason(message);
+      setAuthToken(null);
+      setSessionId(null);
+      setCurrentUser(null);
+      setCurrentUserState(null);
+      closeAllWorkspaceModals();
+    },
+    [currentUser, closeAllWorkspaceModals]
+  );
 
   // Authoritative deduplicated task list from backend database (never resurrect deleted tasks from localStorage)
   const syncTasksFromBackend = async (remoteTasks: Task[]): Promise<Task[]> => {
@@ -133,6 +171,7 @@ export default function App() {
     // Keep browsers synced with MySQL whenever the tab regains focus
     const handleWindowFocus = () => {
       if (currentUser) {
+        api.checkSession().catch(() => {});
         checkAndSync();
       }
     };
@@ -143,6 +182,94 @@ export default function App() {
       window.removeEventListener('focus', handleWindowFocus);
     };
   }, [currentUser?.id]);
+
+  // Listen for session invalidation events (concurrent login on another device, admin force-logout, or server idle expiry)
+  useEffect(() => {
+    const onInvalidated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ code: string; message: string }>;
+      if (!currentUser) return;
+      const code = customEvent.detail?.code || 'SESSION_EXPIRED';
+      const message =
+        customEvent.detail?.message ||
+        'Your session is no longer active. Please sign in again.';
+      handleSessionInvalidated(code, message, false);
+    };
+
+    window.addEventListener('froo-session-invalidated', onInvalidated);
+    return () => {
+      window.removeEventListener('froo-session-invalidated', onInvalidated);
+    };
+  }, [currentUser, handleSessionInvalidated]);
+
+  // 30-Minute Idle Auto-Timeout (with 60s Warning Modal at 29m) & 25-Second Single-Session Heartbeat
+  useEffect(() => {
+    if (!currentUser) {
+      setIdleWarningRemaining(null);
+      return;
+    }
+
+    lastActivityRef.current = Date.now();
+    let lastRecordedEvent = 0;
+
+    const recordUserActivity = () => {
+      const now = Date.now();
+      // Throttle DOM activity updates to every 2 seconds; ignore passive mouse moves while countdown modal is open
+      if (now - lastRecordedEvent < 2000) return;
+      const elapsedSeconds = Math.floor((now - lastActivityRef.current) / 1000);
+      if (elapsedSeconds >= IDLE_WARNING_SECONDS) {
+        // Once in the final 60s warning window, require explicit "Stay Signed In" click
+        return;
+      }
+      lastRecordedEvent = now;
+      lastActivityRef.current = now;
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'click',
+    ];
+    activityEvents.forEach((evt) =>
+      window.addEventListener(evt, recordUserActivity, { passive: true })
+    );
+
+    const idleTickInterval = window.setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - lastActivityRef.current) / 1000);
+      if (elapsedSeconds >= IDLE_LIMIT_SECONDS) {
+        handleSessionInvalidated(
+          'SESSION_IDLE_TIMEOUT',
+          'Your session expired after 30 minutes of inactivity. Please sign in again to continue.',
+          true
+        );
+      } else if (elapsedSeconds >= IDLE_WARNING_SECONDS) {
+        const remaining = Math.max(0, IDLE_LIMIT_SECONDS - elapsedSeconds);
+        setIdleWarningRemaining(remaining);
+      } else {
+        setIdleWarningRemaining((prev) => (prev !== null ? null : prev));
+      }
+    }, 1000);
+
+    // 25-second heartbeat to verify single-device concurrency & refresh server activity timestamp if user was recently active
+    const heartbeatInterval = window.setInterval(() => {
+      api.checkSession().catch(() => {});
+    }, 25000);
+
+    return () => {
+      activityEvents.forEach((evt) => window.removeEventListener(evt, recordUserActivity));
+      window.clearInterval(idleTickInterval);
+      window.clearInterval(heartbeatInterval);
+    };
+  }, [currentUser, handleSessionInvalidated]);
+
+  const handleStaySignedIn = () => {
+    lastActivityRef.current = Date.now();
+    setIdleWarningRemaining(null);
+    api.checkSession().catch(() => {});
+    showToast('Session extended. You remain signed in.');
+  };
 
   // Persist tasks whenever changed
   useEffect(() => {
@@ -206,6 +333,9 @@ export default function App() {
 
   // Login handler
   const handleLoginSuccess = async (user: UserAccount) => {
+    lastActivityRef.current = Date.now();
+    setIdleWarningRemaining(null);
+    setSessionLogoutReason(null);
     setCurrentUserState(user);
     setActiveView('MY_TASKS');
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
@@ -233,6 +363,7 @@ export default function App() {
 
   // Logout handler
   const handleLogout = () => {
+    api.logout('MANUAL').catch(() => {});
     if (currentUser) {
       logSystemAction(
         'USER_LOGOUT',
@@ -240,9 +371,12 @@ export default function App() {
         `User ${currentUser.firstName} ${currentUser.lastName} signed out of the system.`
       );
     }
+    setSessionLogoutReason(null);
     setAuthToken(null);
+    setSessionId(null);
     setCurrentUser(null);
     setCurrentUserState(null);
+    closeAllWorkspaceModals();
     showToast('You have been safely signed out.');
   };
 
@@ -761,6 +895,15 @@ export default function App() {
         onClose={() => setIsChangePasswordOpen(false)}
         currentUser={currentUser}
         onSuccessToast={showToast}
+      />
+
+      {/* 30-Minute Idle Auto-Timeout 60s Warning Modal */}
+      <SessionTimeoutModal
+        isOpen={idleWarningRemaining !== null}
+        remainingSeconds={idleWarningRemaining ?? 60}
+        userName={`${currentUser.firstName} ${currentUser.lastName}`}
+        onStaySignedIn={handleStaySignedIn}
+        onSignOutNow={handleLogout}
       />
     </div>
   );

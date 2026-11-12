@@ -279,13 +279,36 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     return [{ affectedRows: prevCount - fallbackStore.users.length }, []] as any;
   }
 
-  // 9c. USERS: Update last login / activity
-  if (normalizedSql.startsWith('UPDATE users SET last_login_at = NOW()') || normalizedSql.startsWith('UPDATE users SET last_activity = ?')) {
+  // 9c. USERS: Update last login / activity / active_session_id / session_updated_at
+  if (
+    normalizedSql.startsWith('UPDATE users SET last_login_at = NOW()') ||
+    normalizedSql.startsWith('UPDATE users SET last_activity = ?') ||
+    normalizedSql.startsWith('UPDATE users SET active_session_id =') ||
+    normalizedSql.startsWith('UPDATE users SET session_updated_at = NOW()')
+  ) {
     const userId = params[params.length - 1];
     const user = fallbackStore.users.find((u) => u.id === userId);
     if (user) {
-      user.last_login_at = new Date().toISOString();
-      if (params.length >= 2) user.last_activity = params[0];
+      if (normalizedSql.includes('last_login_at = NOW()')) {
+        user.last_login_at = new Date().toISOString();
+      }
+      if (normalizedSql.includes('session_updated_at = NOW()')) {
+        user.session_updated_at = new Date().toISOString();
+      }
+      if (normalizedSql.includes("active_session_id = 'SIGNED_OUT'")) {
+        user.active_session_id = 'SIGNED_OUT';
+        if (params.length >= 2) user.last_activity = params[0];
+      } else if (normalizedSql.includes("active_session_id = 'FORCED_LOGOUT'")) {
+        user.active_session_id = 'FORCED_LOGOUT';
+        if (params.length >= 2) user.last_activity = params[0];
+      } else if (normalizedSql.includes('active_session_id = ?') && normalizedSql.includes('last_activity = ?')) {
+        user.last_activity = params[0];
+        user.active_session_id = params[1];
+      } else if (normalizedSql.includes('active_session_id = ?')) {
+        user.active_session_id = params[0];
+      } else if (params.length >= 2 && normalizedSql.includes('last_activity = ?')) {
+        user.last_activity = params[0];
+      }
     }
     return [{ affectedRows: user ? 1 : 0 }, []] as any;
   }

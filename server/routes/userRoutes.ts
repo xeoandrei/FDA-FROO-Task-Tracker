@@ -10,13 +10,20 @@ router.get('/', authenticateToken, async (_req, res) => {
   try {
     const [rows]: [any[], any] = await pool.query(
       `SELECT id, username, email, first_name, middle_initial, last_name, position,
-              role_code, office_code, cluster_code, is_active, last_login_at, last_activity, created_at
+              role_code, office_code, cluster_code, is_active, last_login_at, last_activity,
+              active_session_id, session_updated_at, created_at
        FROM users
        ORDER BY last_name ASC, first_name ASC`
     );
 
     const users = rows.map((r) => {
       const isSuper = r.id === 'usr-superadmin' || (r.email && r.email.toLowerCase() === 'amldelgado@fda.gov.ph');
+      const activeSess = r.active_session_id ? String(r.active_session_id).trim() : '';
+      const hasActiveSession =
+        Boolean(activeSess) &&
+        activeSess !== 'SIGNED_OUT' &&
+        activeSess !== 'FORCED_LOGOUT';
+
       return {
         id: r.id,
         username: r.username || r.email.split('@')[0],
@@ -32,6 +39,7 @@ router.get('/', authenticateToken, async (_req, res) => {
         createdAt: r.created_at,
         lastLogin: r.last_login_at,
         lastActivity: r.last_activity,
+        hasActiveSession,
       };
     });
 
@@ -307,4 +315,57 @@ router.delete('/:id', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), as
   }
 });
 
+// POST /api/users/:id/force-logout - Force-terminate a user's active session (SUPERADMIN and ADMIN only)
+router.post('/:id/force-logout', authenticateToken, requireRoles('SUPERADMIN', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const [rows]: [any[], any] = await pool.query(
+      'SELECT id, email, first_name, last_name FROM users WHERE id = ?',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    const targetUser = rows[0];
+
+    await pool.query(
+      `UPDATE users SET active_session_id = 'FORCED_LOGOUT', last_activity = ? WHERE id = ?`,
+      ['Session force-terminated by Administrator', id]
+    );
+
+    if (req.user) {
+      try {
+        await pool.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            'USER_LOGOUT',
+            req.user.id,
+            req.user.email,
+            req.user.role,
+            `Administrator ${req.user.firstName} ${req.user.lastName} force-terminated active session for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}).`,
+            id,
+            `${targetUser.first_name} ${targetUser.last_name}`,
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('Audit log write warning on force logout:', auditErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      id,
+      message: `Active session for ${targetUser.first_name} ${targetUser.last_name} has been terminated.`,
+    });
+  } catch (error) {
+    console.error('Force logout user error:', error);
+    res.status(500).json({ error: 'Failed to terminate user session' });
+  }
+});
+
 export default router;
+
