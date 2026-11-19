@@ -1,6 +1,7 @@
 import React from 'react';
 import { Task, TaskStatus, TaskPriority } from '../types/task';
 import { formatDate } from '../utils/storage';
+import { splitAssigneeNames, isNameSuffixToken } from '../utils/taskAuthorization';
 import { ChevronRight, Building2 } from 'lucide-react';
 
 interface TaskListProps {
@@ -31,7 +32,9 @@ const COMPOUND_SURNAME_PREFIXES = new Set([
 ]);
 
 /**
- * Formats a full person name into "First Initial + Last Name" (e.g. "Maria P. Santos" -> "M. Santos")
+ * Formats a full person name into "First Initial + Last Name (+ Suffix)"
+ * e.g. "Maria P. Santos" -> "M. Santos"
+ * e.g. "Franklin Anthony Tabaquin, IV" -> "F. Tabaquin, IV"
  * while keeping office/team labels intact.
  */
 export function formatShortPersonName(rawName: string): string {
@@ -50,35 +53,51 @@ export function formatShortPersonName(rawName: string): string {
     return base;
   }
 
-  const tokens = base.split(/\s+/).filter(Boolean);
-  if (tokens.length <= 1) return base;
+  // Extract any comma-attached suffix first, e.g. "Franklin Anthony Tabaquin, IV" -> core="Franklin Anthony Tabaquin", suffix=", IV"
+  let coreName = base;
+  let attachedSuffix = '';
+  const commaIdx = base.lastIndexOf(',');
+  if (commaIdx !== -1) {
+    const potentialSuffix = base.slice(commaIdx + 1).trim();
+    if (isNameSuffixToken(potentialSuffix)) {
+      coreName = base.slice(0, commaIdx).trim();
+      attachedSuffix = `, ${potentialSuffix}`;
+    }
+  }
+
+  const tokens = coreName.split(/\s+/).filter(Boolean);
+  if (tokens.length <= 1) return `${coreName}${attachedSuffix}`;
+
+  // Also handle space-separated suffix when no comma was used (e.g. "Franklin Anthony Tabaquin IV")
+  if (!attachedSuffix && tokens.length >= 3 && isNameSuffixToken(tokens[tokens.length - 1])) {
+    const suffixToken = tokens.pop()!;
+    attachedSuffix = ` ${suffixToken}`;
+  }
 
   const firstInitial = `${tokens[0].charAt(0).toUpperCase()}.`;
 
   // Check if the surname has a compound prefix like "Dela Cruz" or "De Leon"
   if (tokens.length >= 3) {
     const secondLast = tokens[tokens.length - 2].toLowerCase();
-    const thirdLast = tokens.length >= 4 ? `${tokens[tokens.length - 3].toLowerCase()} ${secondLast}` : '';
+    const thirdLast =
+      tokens.length >= 4 ? `${tokens[tokens.length - 3].toLowerCase()} ${secondLast}` : '';
     if (COMPOUND_SURNAME_PREFIXES.has(thirdLast)) {
       const surname = tokens.slice(tokens.length - 3).join(' ');
-      return `${firstInitial} ${surname}`;
+      return `${firstInitial} ${surname}${attachedSuffix}`;
     }
     if (COMPOUND_SURNAME_PREFIXES.has(secondLast)) {
       const surname = tokens.slice(tokens.length - 2).join(' ');
-      return `${firstInitial} ${surname}`;
+      return `${firstInitial} ${surname}${attachedSuffix}`;
     }
   }
 
   const lastName = tokens[tokens.length - 1];
-  return `${firstInitial} ${lastName}`;
+  return `${firstInitial} ${lastName}${attachedSuffix}`;
 }
 
 export function formatShortAssigneeList(assignedToRaw: string): string {
   if (!assignedToRaw || !assignedToRaw.trim()) return 'Unassigned';
-  const parts = assignedToRaw
-    .split(',')
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const parts = splitAssigneeNames(assignedToRaw);
   if (parts.length === 0) return 'Unassigned';
   return parts.map(formatShortPersonName).join(', ');
 }

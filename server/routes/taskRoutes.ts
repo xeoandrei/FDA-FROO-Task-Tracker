@@ -9,6 +9,28 @@ import {
 
 const router = Router();
 
+const NAME_SUFFIX_PATTERN =
+  /^(jr\.?|sr\.?|i{1,3}|iv|v|vi{0,3}|ix|x|[2345](nd|rd|th)|m\.?d\.?|r\.?ph\.?|esq\.?|ph\.?d\.?|j\.?d\.?|cpa|rn|llb|ll\.?b\.?|llm|ll\.?m\.?|dmd|ddm|dvm|mpa|mba|mph|ceso(\s+[ivx]+)?)$/i;
+
+function splitAssigneeNames(rawAssignedTo?: string | null): string[] {
+  if (!rawAssignedTo || !rawAssignedTo.trim()) return [];
+  const rawParts = rawAssignedTo
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const result: string[] = [];
+  for (const part of rawParts) {
+    const clean = part.replace(/^,+|,+$/g, '').trim();
+    if (result.length > 0 && NAME_SUFFIX_PATTERN.test(clean)) {
+      result[result.length - 1] = `${result[result.length - 1]}, ${part}`;
+    } else {
+      result.push(part);
+    }
+  }
+  return result;
+}
+
 // Helper to fetch full task details with activities and dispatch slips
 async function fetchTaskById(taskId: string): Promise<any | null> {
   const [taskRows]: [any[], any] = await pool.query(
@@ -262,7 +284,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
 
     // Resolve primary assigned user id and office from first assignee if multiple are provided
     const assignedNamesString = assignedTo ? String(assignedTo).trim() : '';
-    const firstAssigneeName = assignedNamesString.split(',')[0]?.trim() || '';
+    const firstAssigneeName = splitAssigneeNames(assignedNamesString)[0] || '';
 
     let targetUserId = assignedToUserId || null;
     let assigneeOfficeCode: string | null = null;
@@ -475,9 +497,8 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
     const assignedNames = (task.assigned_to_names || '').toLowerCase();
     const isDirectAssignee =
       task.assigned_to_user_id === user.id ||
-      assignedNames
-        .split(',')
-        .map((s: string) => s.trim())
+      splitAssigneeNames(task.assigned_to_names)
+        .map((s: string) => s.toLowerCase())
         .includes(userFullName) ||
       assignedNames.includes(userFullName);
 

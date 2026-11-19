@@ -117,6 +117,39 @@ export function isUserCreatedTask(task: Task, user: UserAccount | null): boolean
   return false;
 }
 
+const NAME_SUFFIX_PATTERN =
+  /^(jr\.?|sr\.?|i{1,3}|iv|v|vi{0,3}|ix|x|[2345](nd|rd|th)|m\.?d\.?|r\.?ph\.?|esq\.?|ph\.?d\.?|j\.?d\.?|cpa|rn|llb|ll\.?b\.?|llm|ll\.?m\.?|dmd|ddm|dvm|mpa|mba|mph|ceso(\s+[ivx]+)?)$/i;
+
+/**
+ * Returns true if a token is a generational or professional name suffix (e.g. "IV", "Jr.", "III", "MD").
+ */
+export function isNameSuffixToken(token: string): boolean {
+  const clean = (token || '').trim().replace(/^,+|,+$/g, '').trim();
+  return NAME_SUFFIX_PATTERN.test(clean);
+}
+
+/**
+ * Splits a comma-separated list of personnel names while keeping generational/professional
+ * suffixes (e.g. "Franklin Anthony Tabaquin, IV", "Juan Dela Cruz, Jr.") attached to the person's name.
+ */
+export function splitAssigneeNames(rawAssignedTo?: string | null): string[] {
+  if (!rawAssignedTo || !rawAssignedTo.trim()) return [];
+  const rawParts = rawAssignedTo
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const result: string[] = [];
+  for (const part of rawParts) {
+    if (result.length > 0 && isNameSuffixToken(part)) {
+      result[result.length - 1] = `${result[result.length - 1]}, ${part}`;
+    } else {
+      result.push(part);
+    }
+  }
+  return result;
+}
+
 /**
  * Checks if a task is directly assigned to the given user account.
  */
@@ -126,11 +159,8 @@ export function isUserAssignedToTask(task: Task, user: UserAccount | null): bool
   const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase().trim();
   const assigned = (task.assignedTo || '').toLowerCase().trim();
 
-  // 1. Direct full name or comma-separated multi-assignee match
-  const assigneeList = assigned
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // 1. Direct full name or suffix-aware comma-separated multi-assignee match
+  const assigneeList = splitAssigneeNames(task.assignedTo).map((s) => s.toLowerCase());
   if (assigned === userFullName || assigneeList.includes(userFullName)) return true;
 
   // 2. Direct email match

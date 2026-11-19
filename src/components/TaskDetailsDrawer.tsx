@@ -37,7 +37,7 @@ import { UserAccount } from '../types/auth';
 import { formatDate, formatDateTime } from '../utils/storage';
 import { OUTCOMES, STATUSES, FROO_OFFICES, CATEGORIES } from '../data/offices';
 import { logSystemAction, getStoredUsers } from '../utils/authStorage';
-import { doesRegionMatch } from '../utils/taskAuthorization';
+import { doesRegionMatch, splitAssigneeNames } from '../utils/taskAuthorization';
 import { CreateDispatchModal } from './CreateDispatchModal';
 import { DispatchSlipPreviewModal } from './DispatchSlipPreviewModal';
 import { api } from '../api/client';
@@ -384,10 +384,9 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   };
 
   // Current assigned personnel list & candidate staff pool for "+ Add Personnel"
-  const currentAssignedList = (task.assignedTo || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => Boolean(s) && s.toLowerCase() !== 'unassigned');
+  const currentAssignedList = splitAssigneeNames(task.assignedTo).filter(
+    (s) => s.toLowerCase() !== 'unassigned'
+  );
 
   const staffPool = (allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers()).filter(
     (u) => u.status === 'active'
@@ -416,10 +415,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   const pendingPersonnelToAdd = Array.from(
     new Set([
       ...selectedNewPersonnel,
-      ...customPersonnelInput
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      ...splitAssigneeNames(customPersonnelInput),
     ])
   ).filter(
     (candidate) =>

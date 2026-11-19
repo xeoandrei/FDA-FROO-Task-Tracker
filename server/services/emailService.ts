@@ -229,10 +229,21 @@ export async function resolveTaskAssigneeEmails(
     }
 
     if (assignedToNames) {
-      const names = assignedToNames
+      const suffixPattern =
+        /^(jr\.?|sr\.?|i{1,3}|iv|v|vi{0,3}|ix|x|[2345](nd|rd|th)|m\.?d\.?|r\.?ph\.?|esq\.?|ph\.?d\.?|j\.?d\.?|cpa|rn|llb|ll\.?b\.?|llm|ll\.?m\.?|dmd|ddm|dvm|mpa|mba|mph|ceso(\s+[ivx]+)?)$/i;
+      const rawParts = assignedToNames
         .split(',')
         .map((n) => n.trim())
         .filter(Boolean);
+      const names: string[] = [];
+      for (const part of rawParts) {
+        const clean = part.replace(/^,+|,+$/g, '').trim();
+        if (names.length > 0 && suffixPattern.test(clean)) {
+          names[names.length - 1] = `${names[names.length - 1]}, ${part}`;
+        } else {
+          names.push(part);
+        }
+      }
 
       for (const name of names) {
         const lowerName = name.toLowerCase();
