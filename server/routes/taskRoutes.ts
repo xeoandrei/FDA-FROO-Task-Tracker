@@ -716,13 +716,13 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
   }
 });
 
-// PATCH /api/tasks/:id - Update operational details
+// PATCH /api/tasks/:id - Update operational details or add assigned personnel
 router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const connection = await pool.getConnection();
   try {
     const { id } = req.params;
     const user = req.user;
-    const { scheduledDate, location, outcome, remarks, region, assignedTo } = req.body;
+    const { scheduledDate, location, outcome, remarks, region, assignedTo, addedPersonnel } = req.body;
 
     await connection.beginTransaction();
 
@@ -758,18 +758,49 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res) =
     const actorOffice = user?.office || task.region;
     const validActorId = await resolveValidUserId(connection, user?.id);
 
+    const addedList = Array.isArray(addedPersonnel)
+      ? addedPersonnel.map((n: string) => String(n).trim()).filter(Boolean)
+      : [];
+
+    const activityAction =
+      addedList.length > 0
+        ? `Added assigned personnel to task: ${addedList.join(', ')}.`
+        : 'Operational details updated.';
+
+    const activityNotes =
+      addedList.length > 0
+        ? `Updated Assigned Personnel list: ${assignedTo || task.assigned_to_names}`
+        : `Updated outcome to "${outcome || task.outcome}" & location to "${location || task.location}"`;
+
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
-       VALUES (?, 'Operational details updated.', ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
+        activityAction,
         actorName,
         actorOffice,
         validActorId,
-        `Updated outcome to "${outcome || task.outcome}" & location to "${location || task.location}"`,
+        activityNotes,
         task.status,
       ]
     );
+
+    if (addedList.length > 0 && user) {
+      await connection.query(
+        `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          'TASK_ASSIGNED',
+          validActorId,
+          user.email,
+          user.role,
+          `Added personnel (${addedList.join(', ')}) to task "${task.task_title}".`,
+          id,
+          task.task_title,
+        ]
+      );
+    }
 
     await connection.commit();
 

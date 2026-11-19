@@ -29,12 +29,15 @@ import {
   ShieldAlert,
   ShieldCheck,
   Mail,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority, ActivityItem, FrooUserPersona, DispatchSlip, DispatchStatus } from '../types/task';
 import { UserAccount } from '../types/auth';
 import { formatDate, formatDateTime } from '../utils/storage';
 import { OUTCOMES, STATUSES, FROO_OFFICES, CATEGORIES } from '../data/offices';
-import { logSystemAction } from '../utils/authStorage';
+import { logSystemAction, getStoredUsers } from '../utils/authStorage';
+import { doesRegionMatch } from '../utils/taskAuthorization';
 import { CreateDispatchModal } from './CreateDispatchModal';
 import { DispatchSlipPreviewModal } from './DispatchSlipPreviewModal';
 import { api } from '../api/client';
@@ -48,6 +51,7 @@ interface TaskDetailsDrawerProps {
   currentPersona?: FrooUserPersona;
   currentUser?: UserAccount | null;
   allTasks?: Task[];
+  allStaffUsers?: UserAccount[];
   onPromptReceiveTask?: (task: Task) => void;
 }
 
@@ -60,6 +64,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   currentPersona,
   currentUser,
   allTasks = [],
+  allStaffUsers,
   onPromptReceiveTask,
 }) => {
   // Dispatch state
@@ -107,6 +112,14 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   } | null>(null);
   const [rejectDispatchReason, setRejectDispatchReason] = useState('');
 
+  // Add more personnel state (under Operational Details)
+  const [isAddingPersonnel, setIsAddingPersonnel] = useState(false);
+  const [selectedNewPersonnel, setSelectedNewPersonnel] = useState<string[]>([]);
+  const [customPersonnelInput, setCustomPersonnelInput] = useState('');
+  const [showAllOfficesPersonnel, setShowAllOfficesPersonnel] = useState(false);
+  const [isConfirmingAddPersonnel, setIsConfirmingAddPersonnel] = useState(false);
+  const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
+
   useEffect(() => {
     setReminderFeedback(null);
     setIsConfirmingReminder(false);
@@ -115,6 +128,12 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     setIsDeletingTask(false);
     setConfirmingDispatchAction(null);
     setRejectDispatchReason('');
+    setIsAddingPersonnel(false);
+    setSelectedNewPersonnel([]);
+    setCustomPersonnelInput('');
+    setShowAllOfficesPersonnel(false);
+    setIsConfirmingAddPersonnel(false);
+    setIsSavingPersonnel(false);
     if (task) {
       setEditDtn(task.dtn || '');
       setEditScheduledDate(task.scheduledDate || '');
@@ -362,6 +381,125 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     };
     onUpdateTask(updated);
     setIsEditingDetails(false);
+  };
+
+  // Current assigned personnel list & candidate staff pool for "+ Add Personnel"
+  const currentAssignedList = (task.assignedTo || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => Boolean(s) && s.toLowerCase() !== 'unassigned');
+
+  const staffPool = (allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers()).filter(
+    (u) => u.status === 'active'
+  );
+
+  const isStaffAlreadyAssigned = (u: UserAccount) => {
+    const fullName = `${u.firstName} ${u.lastName}`.trim().toLowerCase();
+    const fullWithMi = `${u.firstName} ${u.middleInitial || ''} ${u.lastName}`
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    return currentAssignedList.some((existing) => {
+      const cleanExisting = existing.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase();
+      return cleanExisting === fullName || cleanExisting === fullWithMi;
+    });
+  };
+
+  const unassignedActiveStaff = staffPool.filter((u) => !isStaffAlreadyAssigned(u));
+  const regionMatchedStaff = unassignedActiveStaff.filter((u) =>
+    doesRegionMatch(task.region, u.office)
+  );
+  const otherOfficesStaff = unassignedActiveStaff.filter(
+    (u) => !doesRegionMatch(task.region, u.office)
+  );
+
+  const pendingPersonnelToAdd = Array.from(
+    new Set([
+      ...selectedNewPersonnel,
+      ...customPersonnelInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ])
+  ).filter(
+    (candidate) =>
+      !currentAssignedList.some(
+        (existing) => existing.toLowerCase() === candidate.toLowerCase()
+      )
+  );
+
+  const toggleSelectNewPersonnel = (staffName: string) => {
+    setSelectedNewPersonnel((prev) =>
+      prev.includes(staffName) ? prev.filter((n) => n !== staffName) : [...prev, staffName]
+    );
+    setIsConfirmingAddPersonnel(false);
+  };
+
+  const handleConfirmAddPersonnel = async () => {
+    if (pendingPersonnelToAdd.length === 0 || isSavingPersonnel) return;
+
+    const mergedAssignees = [...currentAssignedList, ...pendingPersonnelToAdd].join(', ');
+    setIsSavingPersonnel(true);
+
+    try {
+      const backendUpdated = await api.updateTask(task.id, {
+        assignedTo: mergedAssignees,
+        addedPersonnel: pendingPersonnelToAdd,
+      });
+
+      if (backendUpdated) {
+        onUpdateTask(backendUpdated);
+        setEditAssignedTo(backendUpdated.assignedTo);
+        setSelectedNewPersonnel([]);
+        setCustomPersonnelInput('');
+        setIsConfirmingAddPersonnel(false);
+        setIsAddingPersonnel(false);
+        setIsSavingPersonnel(false);
+        if (currentUser) {
+          logSystemAction(
+            'TASK_ASSIGNED',
+            currentUser,
+            `Added personnel (${pendingPersonnelToAdd.join(', ')}) to task "${task.taskTitle}".`,
+            { targetEntityId: task.id, targetEntityName: task.taskTitle }
+          );
+        }
+        return;
+      }
+    } catch {
+      // Fallback to local state when local MySQL container is offline
+    }
+
+    const newActivity: ActivityItem = {
+      id: `act-${Date.now()}`,
+      action: `Added assigned personnel to task: ${pendingPersonnelToAdd.join(', ')}.`,
+      actor: actorName,
+      actorOffice: actorOffice,
+      date: formatDateTime(new Date()),
+      notes: `Updated Assigned Personnel list: ${mergedAssignees}`,
+    };
+
+    const updated: Task = {
+      ...task,
+      assignedTo: mergedAssignees,
+      activityHistory: [newActivity, ...(task.activityHistory || [])],
+    };
+
+    onUpdateTask(updated);
+    setEditAssignedTo(mergedAssignees);
+    setSelectedNewPersonnel([]);
+    setCustomPersonnelInput('');
+    setIsConfirmingAddPersonnel(false);
+    setIsAddingPersonnel(false);
+    setIsSavingPersonnel(false);
+
+    if (currentUser) {
+      logSystemAction(
+        'TASK_ASSIGNED',
+        currentUser,
+        `Added personnel (${pendingPersonnelToAdd.join(', ')}) to task "${task.taskTitle}".`,
+        { targetEntityId: task.id, targetEntityName: task.taskTitle }
+      );
+    }
   };
 
   const handleSaveDispatch = async (slip: DispatchSlip) => {
@@ -1053,6 +1191,237 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Assigned Personnel & Add Personnel Section (Right below Operational Details) */}
+            <div className="pt-3 mt-3 border-t border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-[#056839]" />
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                    Assigned Personnel ({currentAssignedList.length})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingPersonnel((prev) => !prev);
+                    setIsConfirmingAddPersonnel(false);
+                  }}
+                  className="px-2.5 py-1 text-xs font-semibold text-[#056839] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>{isAddingPersonnel ? 'Close Panel' : '+ Add Personnel'}</span>
+                </button>
+              </div>
+
+              {/* Current Assigned Personnel Chips */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {currentAssignedList.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">No personnel currently assigned</span>
+                ) : (
+                  currentAssignedList.map((personName, idx) => (
+                    <span
+                      key={`${personName}-${idx}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                    >
+                      <User className="w-3 h-3 text-[#056839]" />
+                      <span>{personName}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {/* Add Personnel Selector & Confirmation Panel */}
+              {isAddingPersonnel && (
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Add Additional Personnel to Task
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Showing active staff in <strong>{task.region}</strong> first
+                      </span>
+                    </div>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer select-none bg-white px-2.5 py-1 rounded-md border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={showAllOfficesPersonnel}
+                        onChange={(e) => setShowAllOfficesPersonnel(e.target.checked)}
+                        className="rounded border-slate-300 text-[#056839] focus:ring-[#056839]"
+                      />
+                      <span>Include staff from all offices</span>
+                    </label>
+                  </div>
+
+                  {/* Staff Selection List (Task Region First, then Other Offices if toggled or if region has none) */}
+                  <div className="max-h-44 overflow-y-auto bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+                    {regionMatchedStaff.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 px-1.5 pb-1">
+                          {task.region} Staff ({regionMatchedStaff.length})
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {regionMatchedStaff.map((u) => {
+                            const fullName = `${u.firstName} ${u.lastName}`;
+                            const isChecked = selectedNewPersonnel.includes(fullName);
+                            return (
+                              <label
+                                key={u.id}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer transition ${
+                                  isChecked
+                                    ? 'bg-emerald-50 text-emerald-950 font-semibold border border-emerald-200'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleSelectNewPersonnel(fullName)}
+                                  className="rounded border-slate-300 text-[#056839] focus:ring-[#056839]"
+                                />
+                                <div className="truncate">
+                                  <div className="truncate">{fullName}</div>
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    {u.position} • {u.office}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {(showAllOfficesPersonnel || regionMatchedStaff.length === 0) &&
+                      otherOfficesStaff.length > 0 && (
+                        <div className="p-2">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1.5 pb-1">
+                            Other FROO Offices ({otherOfficesStaff.length})
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                            {otherOfficesStaff.map((u) => {
+                              const fullName = `${u.firstName} ${u.lastName}`;
+                              const isChecked = selectedNewPersonnel.includes(fullName);
+                              return (
+                                <label
+                                  key={u.id}
+                                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer transition ${
+                                    isChecked
+                                      ? 'bg-emerald-50 text-emerald-950 font-semibold border border-emerald-200'
+                                      : 'hover:bg-slate-50 text-slate-700'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSelectNewPersonnel(fullName)}
+                                    className="rounded border-slate-300 text-[#056839] focus:ring-[#056839]"
+                                  />
+                                  <div className="truncate">
+                                    <div className="truncate">{fullName}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">
+                                      {u.position} • {u.office}
+                                    </div>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                    {regionMatchedStaff.length === 0 &&
+                      !showAllOfficesPersonnel &&
+                      otherOfficesStaff.length === 0 && (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          All active staff members are already assigned to this task.
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Optional Manual Name Entry */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Or enter additional staff name(s) (comma-separated):
+                    </label>
+                    <input
+                      type="text"
+                      value={customPersonnelInput}
+                      onChange={(e) => {
+                        setCustomPersonnelInput(e.target.value);
+                        setIsConfirmingAddPersonnel(false);
+                      }}
+                      placeholder="e.g. Juan Dela Cruz"
+                      className="w-full text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+                    />
+                  </div>
+
+                  {/* Step 1 Action or Step 2 Inline Confirmation */}
+                  {!isConfirmingAddPersonnel ? (
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] text-slate-500">
+                        {pendingPersonnelToAdd.length > 0
+                          ? `Selected (${pendingPersonnelToAdd.length}): ${pendingPersonnelToAdd.join(', ')}`
+                          : 'Select one or more personnel above to add'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingPersonnel(false);
+                            setSelectedNewPersonnel([]);
+                            setCustomPersonnelInput('');
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pendingPersonnelToAdd.length === 0}
+                          onClick={() => setIsConfirmingAddPersonnel(true)}
+                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-2xs transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add Selected Personnel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-950 space-y-2 animate-in fade-in duration-100">
+                      <div className="text-xs leading-relaxed">
+                        <span className="font-bold block text-emerald-950">
+                          Confirm Saving Additional Personnel
+                        </span>
+                        <span>
+                          Add <strong>{pendingPersonnelToAdd.join(', ')}</strong> to task{' '}
+                          <strong>&ldquo;{task.taskTitle}&rdquo;</strong>? This will update the assigned personnel list and record an official entry in Activity History.
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={isSavingPersonnel}
+                          onClick={() => setIsConfirmingAddPersonnel(false)}
+                          className="px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSavingPersonnel}
+                          onClick={handleConfirmAddPersonnel}
+                          className="px-3.5 py-1 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-md shadow-2xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{isSavingPersonnel ? 'Saving...' : 'Confirm & Save Personnel'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Activity History Section (Matching Screenshot 4) */}

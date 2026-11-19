@@ -321,21 +321,64 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const pendingCount = users.filter((u) => u.status === 'pending').length;
 
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.office.toLowerCase().includes(searchTerm.toLowerCase());
+  // Official Office / Jurisdiction sort rank helper so User Management is sorted by Office / Jurisdiction by default
+  const getOfficeSortWeight = (officeRaw: string): number => {
+    const office = (officeRaw || '').trim();
+    if (!office) return 999;
 
-    const matchesRole =
-      roleFilter === 'All' ||
-      u.role === roleFilter ||
-      (roleFilter === 'STANDARD' && ((u.role as string) === 'RANK_AND_FILE' || u.role === 'STANDARD'));
-    const matchesStatus = statusFilter === 'All' || u.status === statusFilter;
+    // 1. ODDG-FROO Headquarters first
+    if (office.toUpperCase().includes('ODDG-FROO')) return 0;
 
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+    // 2. Cluster offices in official sequence
+    const clusterIdx = CLUSTERS_LIST.findIndex(
+      (c) =>
+        office.toLowerCase().includes(c.name.toLowerCase()) ||
+        office.toUpperCase().includes(`(${c.code})`)
+    );
+    if (clusterIdx !== -1) return 10 + clusterIdx;
+
+    // 3. Regional Field Offices in official FROO_OFFICES order (Region NCR, CAR, Region 1..13)
+    const officeIdx = FROO_OFFICES.findIndex(
+      (o) =>
+        o.code.toLowerCase() === office.toLowerCase() ||
+        o.name.toLowerCase() === office.toLowerCase() ||
+        office.toLowerCase().includes(o.code.toLowerCase())
+    );
+    if (officeIdx !== -1) return 100 + officeIdx;
+
+    return 500;
+  };
+
+  const filteredUsers = users
+    .filter((u) => {
+      const matchesSearch =
+        u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${u.firstName} ${u.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.office.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesRole =
+        roleFilter === 'All' ||
+        u.role === roleFilter ||
+        (roleFilter === 'STANDARD' && ((u.role as string) === 'RANK_AND_FILE' || u.role === 'STANDARD'));
+      const matchesStatus = statusFilter === 'All' || u.status === statusFilter;
+
+      return matchesSearch && matchesRole && matchesStatus;
+    })
+    .sort((a, b) => {
+      const weightDiff = getOfficeSortWeight(a.office) - getOfficeSortWeight(b.office);
+      if (weightDiff !== 0) return weightDiff;
+
+      const officeAlpha = (a.office || '').localeCompare(b.office || '', undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      if (officeAlpha !== 0) return officeAlpha;
+
+      return `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, undefined, {
+        sensitivity: 'base',
+      });
+    });
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">

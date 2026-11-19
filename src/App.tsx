@@ -853,6 +853,7 @@ export default function App() {
         onDeleteTask={handleDeleteTask}
         currentUser={currentUser}
         allTasks={tasks}
+        allStaffUsers={allStaffUsers}
         onPromptReceiveTask={handlePromptReceiveTask}
       />
 
