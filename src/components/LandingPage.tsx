@@ -175,34 +175,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
 
       {/* Top Navbar */}
       <header className="relative z-10 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center p-1 shadow-md border-2 border-emerald-500/40">
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center p-1 shadow-md border-2 border-emerald-500/40 shrink-0">
               <img
                 src="/assets/aistudio/FDA-Web-Logo-150x150-1_975a7f7f.png"
                 alt="FDA Philippines Emblem"
-                className="w-10 h-10 object-contain"
+                className="w-7 h-7 sm:w-10 sm:h-10 object-contain"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base sm:text-lg text-white tracking-tight">
+                <span className="sm:hidden font-bold text-sm text-white tracking-tight truncate">
+                  FROO Task Tracker
+                </span>
+                <span className="hidden sm:inline font-bold text-base sm:text-lg text-white tracking-tight">
                   Field Regulatory Operations Office Tracker
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-[10.5px] sm:text-xs text-slate-400 truncate">
                 Food and Drug Administration Philippines
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={() => {
                 setLoginError(null);
                 setActiveModal('login');
               }}
-              className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700/80 rounded-lg transition-colors border border-slate-700 cursor-pointer"
+              className="px-3 sm:px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700/80 rounded-lg transition-colors border border-slate-700 cursor-pointer whitespace-nowrap"
             >
               Sign In
             </button>
@@ -211,20 +214,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                 setRegError(null);
                 setActiveModal('register');
               }}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#056839] hover:bg-[#04522d] shadow-sm shadow-[#056839]/40 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+              className="px-3 sm:px-4 py-2 text-xs font-semibold text-white bg-[#056839] hover:bg-[#04522d] shadow-sm shadow-[#056839]/40 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Register Account</span>
+              <span className="sm:hidden">Register</span>
+              <span className="hidden sm:inline">Register Account</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="relative z-10 pt-16 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex-1 flex flex-col justify-center">
+      <section className="relative z-10 pt-10 pb-14 sm:pt-16 sm:pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex-1 flex flex-col justify-center">
         <div className="text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] sm:text-xs font-medium mb-5 sm:mb-6">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>Role-Based Access Control • 5 Clusters • 16 Regional Offices</span>
           </div>
 
@@ -235,15 +239,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
             </span>
           </h1>
 
-          <p className="mt-6 text-base sm:text-lg text-slate-300 leading-relaxed max-w-3xl mx-auto">
+          <p className="mt-5 sm:mt-6 text-sm sm:text-lg text-slate-300 leading-relaxed max-w-3xl mx-auto">
             The centralized operational system for assigning, tracking, and executing field inspections, investigations, and authorized regulatory dispatches across the Philippines.
           </p>
 
           {/* Action CTAs */}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 sm:gap-4 max-w-sm sm:max-w-none mx-auto">
             <button
               onClick={() => setActiveModal('login')}
-              className="px-6 py-3.5 text-sm font-semibold text-white bg-[#056839] hover:bg-[#04522d] rounded-xl shadow-lg shadow-[#056839]/30 transition-all flex items-center gap-2 cursor-pointer hover:scale-[1.02]"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-white bg-[#056839] hover:bg-[#04522d] rounded-xl shadow-lg shadow-[#056839]/30 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02]"
             >
               <Lock className="w-4 h-4 text-emerald-200" />
               <span>Access Tracker Workspace</span>
@@ -252,7 +256,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
 
             <button
               onClick={() => setActiveModal('register')}
-              className="px-6 py-3.5 text-sm font-semibold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition-all cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition-all cursor-pointer text-center"
             >
               Create Staff Account (@fda.gov.ph)
             </button>
@@ -301,8 +305,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
 
       {/* LOGIN MODAL */}
       {activeModal === 'login' && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 shadow-2xl relative my-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-white p-1 flex items-center justify-center shadow-sm">
@@ -423,8 +427,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
 
       {/* REGISTER MODAL */}
       {activeModal === 'register' && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative my-8">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 shadow-2xl relative my-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-white p-1 flex items-center justify-center shadow-sm">

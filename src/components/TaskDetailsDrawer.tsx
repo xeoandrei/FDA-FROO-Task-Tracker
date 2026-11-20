@@ -718,20 +718,20 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       {/* Sliding Drawer */}
       <div className="w-full max-w-xl sm:max-w-2xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200 font-sans">
         {/* Drawer Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div>
-            <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase block">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50">
+          <div className="min-w-0">
+            <span className="text-[10.5px] sm:text-[11px] font-bold tracking-wider text-slate-400 uppercase block truncate">
               FROO Task File • {task.id} {task.dtn ? `• DTN: ${task.dtn}` : ''}
             </span>
-            <h2 className="text-base font-bold text-slate-900 line-clamp-1">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 line-clamp-1">
               Task Details
             </h2>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={() => setIsConfirmingDeleteTask((prev) => !prev)}
-              className={`p-1.5 rounded-md transition cursor-pointer ${
+              className={`p-2 sm:p-1.5 rounded-md transition cursor-pointer ${
                 isConfirmingDeleteTask
                   ? 'text-rose-700 bg-rose-100'
                   : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
@@ -743,7 +743,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition cursor-pointer"
+              className="p-2 sm:p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition cursor-pointer"
+              aria-label="Close Task Details"
             >
               <X className="w-5 h-5" />
             </button>
@@ -752,7 +753,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
         {/* Inline Delete Confirmation Banner */}
         {isConfirmingDeleteTask && (
-          <div className="px-6 py-3 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
+          <div className="px-4 sm:px-6 py-3 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
             <div className="flex items-center gap-2 text-xs text-rose-900">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span className="font-semibold">
@@ -764,7 +765,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                 type="button"
                 disabled={isDeletingTask}
                 onClick={() => setIsConfirmingDeleteTask(false)}
-                className="px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition cursor-pointer"
+                className="px-3 py-1.5 sm:py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -775,7 +776,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                   setIsDeletingTask(true);
                   await onDeleteTask(task.id);
                 }}
-                className="px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md shadow-2xs transition cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 sm:py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md shadow-2xs transition cursor-pointer disabled:opacity-50"
               >
                 {isDeletingTask ? 'Deleting...' : 'Yes, Delete Task'}
               </button>
@@ -784,7 +785,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
         )}
 
         {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-600">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6 text-xs text-slate-600">
           {/* Main Task Title & Badges */}
           <div className="space-y-2">
             <h3 className="text-lg font-bold text-slate-900 leading-snug">
@@ -1059,8 +1060,8 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
             </div>
 
             {isEditingDetails ? (
-              <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in fade-in">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3 p-3.5 sm:p-4 bg-slate-50 rounded-xl border border-slate-200 animate-in fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-semibold mb-1">DTN (14 digits)</label>
                     <input
@@ -1070,7 +1071,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                       value={editDtn}
                       onChange={(e) => setEditDtn(e.target.value.replace(/\D/g, '').slice(0, 14))}
                       placeholder="14-digit Document Tracking No."
-                      className="w-full text-xs font-mono border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs font-mono border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                     />
                   </div>
 
@@ -1080,19 +1081,19 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                       type="text"
                       value={editAssignedTo}
                       onChange={(e) => setEditAssignedTo(e.target.value)}
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-semibold mb-1">Scheduled Date</label>
                     <input
                       type="date"
                       value={editScheduledDate}
                       onChange={(e) => setEditScheduledDate(e.target.value)}
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                     />
                   </div>
 
@@ -1101,7 +1102,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                     <select
                       value={editOutcome}
                       onChange={(e) => setEditOutcome(e.target.value)}
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                     >
                       {OUTCOMES.map((o) => (
                         <option key={o} value={o}>{o}</option>
@@ -1355,13 +1356,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
                   {/* Step 1 Action or Step 2 Inline Confirmation */}
                   {!isConfirmingAddPersonnel ? (
-                    <div className="flex items-center justify-between gap-2 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <span className="text-[11px] text-slate-500">
                         {pendingPersonnelToAdd.length > 0
                           ? `Selected (${pendingPersonnelToAdd.length}): ${pendingPersonnelToAdd.join(', ')}`
                           : 'Select one or more personnel above to add'}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 ml-auto">
                         <button
                           type="button"
                           onClick={() => {
@@ -1851,13 +1852,13 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
         </div>
 
         {/* Drawer Footer */}
-        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
-          <span className="text-slate-400 text-[11px]">
+        <div className="px-4 py-3 sm:px-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2 flex-wrap text-xs pb-safe">
+          <span className="text-slate-400 text-[11px] truncate max-w-[70%]">
             Created by <strong className="text-slate-700">{task.createdBy}</strong>
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-md transition shadow-2xs"
+            className="px-4 py-2 sm:py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-md transition shadow-2xs"
           >
             Close
           </button>

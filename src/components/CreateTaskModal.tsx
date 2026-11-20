@@ -209,26 +209,27 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-2xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[94dvh] sm:max-h-none flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 sm:my-auto">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">Create New Task</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 shrink-0">
+          <div className="min-w-0">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">Create New Task</h3>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
               Create and assign a new operational task.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition"
+            className="text-slate-400 hover:text-slate-600 p-2 sm:p-1 rounded-md hover:bg-slate-100 transition shrink-0"
+            aria-label="Close Create Task Modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs max-h-[82vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs flex-1 overflow-y-auto sm:max-h-[82vh] pb-safe">
           {error && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -238,13 +239,13 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
           {/* DTN (Document Tracking Number) with N/A checkbox */}
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between flex-wrap gap-1.5 mb-1">
               <label className="text-slate-700 font-semibold flex items-center gap-1.5">
                 <Hash className="w-3.5 h-3.5 text-[#056839]" />
                 <span>DTN (Document Tracking Number)</span>
                 <span className="text-rose-500">*</span>
               </label>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 {!isDtnNa && (
                   <span
                     className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
@@ -619,13 +620,13 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition"
+              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition cursor-pointer"
+              className="flex-1 sm:flex-none px-5 py-2.5 sm:py-2 text-xs font-bold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg shadow-sm transition cursor-pointer"
             >
               Create Task
             </button>

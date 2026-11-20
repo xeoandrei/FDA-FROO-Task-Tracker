@@ -381,48 +381,52 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[88vh] flex flex-col border border-slate-200 overflow-hidden text-slate-800">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-4">
+      <div className="bg-white rounded-none md:rounded-xl shadow-2xl w-full max-w-5xl h-[100dvh] md:h-[88vh] flex flex-col border-0 md:border border-slate-200 overflow-hidden text-slate-800">
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-[#056839] flex items-center justify-center">
-              <Users className="w-5 h-5" />
+        <div className="px-4 py-3 md:px-6 md:py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-emerald-100 text-[#056839] flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 md:w-5 md:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">FDA FROO User Management</h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-[#056839] border border-emerald-200">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+                <h2 className="text-sm md:text-base font-bold text-slate-900 truncate">
+                  FDA FROO User Management
+                </h2>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-[#056839] border border-emerald-200">
                   {currentUser.role === 'RANK_AND_FILE' ? 'STANDARD' : currentUser.role} Control
                 </span>
                 {pendingCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1 animate-pulse">
                     <Clock className="w-3 h-3 text-amber-600" />
-                    <span>{pendingCount} Pending Approval</span>
+                    <span>{pendingCount} Pending</span>
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="hidden sm:block text-xs text-slate-500">
                 Manage staff accounts, assign regional office jurisdictions, and enforce role access
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             <button
               onClick={() => {
                 setIsAddUserOpen(true);
                 setFormError(null);
                 setFormSuccess(null);
               }}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              className="px-2.5 md:px-3.5 py-2 md:py-1.5 text-xs font-semibold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Add Staff Account</span>
+              <span className="md:hidden">Add</span>
+              <span className="hidden md:inline">Add Staff Account</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
+              className="p-2 md:p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
+              aria-label="Close User Management"
             >
               <X className="w-5 h-5" />
             </button>
@@ -431,11 +435,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
         {/* Pending Review Alert Banner */}
         {pendingCount > 0 && (
-          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 flex-wrap gap-2">
+          <div className="bg-amber-50 border-b border-amber-200 px-4 md:px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-amber-500" />
-              <span className="font-bold">{pendingCount} Staff Registration{pendingCount > 1 ? 's' : ''} Awaiting Approval:</span>
-              <span className="text-amber-800">New accounts require Superadmin or ODDG-FROO Admin approval before staff can access the portal.</span>
+              <span className="flex h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+              <span className="font-bold">{pendingCount} Registration{pendingCount > 1 ? 's' : ''} Awaiting Approval</span>
+              <span className="hidden md:inline text-amber-800">New accounts require Superadmin or ODDG-FROO Admin approval before staff can access the portal.</span>
             </div>
             {statusFilter !== 'pending' && (
               <button
@@ -449,27 +453,27 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         )}
 
         {/* Filters and Controls */}
-        <div className="p-4 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[220px]">
+        <div className="p-3 md:p-4 border-b border-slate-200 bg-white flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-2.5 md:gap-3">
+          <div className="relative flex-1 min-w-0 md:min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, email, username or office..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#056839] focus:bg-white"
+              placeholder="Search name, email, username, office..."
+              className="w-full pl-9 pr-3 py-2 md:py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#056839] focus:bg-white"
             />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 text-xs text-slate-500">
+          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:flex-wrap">
+            <div className="hidden md:flex items-center gap-1 text-xs text-slate-500">
               <Filter className="w-3.5 h-3.5" />
               <span>Role:</span>
             </div>
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+              className="w-full md:w-auto text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 md:py-1.5 focus:outline-none focus:border-[#056839]"
             >
               <option value="All">All Roles</option>
               <option value="SUPERADMIN">Superadmin</option>
@@ -482,7 +486,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#056839]"
+              className="w-full md:w-auto text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 md:py-1.5 focus:outline-none focus:border-[#056839]"
             >
               <option value="All">All Statuses</option>
               <option value="pending">Pending Approval {pendingCount > 0 ? `(${pendingCount})` : ''}</option>
@@ -490,26 +494,257 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <option value="deactivated">Deactivated</option>
             </select>
 
-            <span className="text-xs text-slate-400 ml-1">
-              Showing {filteredUsers.length} of {users.length} accounts
+            <span className="col-span-2 md:col-span-1 text-[11px] md:text-xs text-slate-400 md:ml-1">
+              Showing {filteredUsers.length} of {users.length} accounts • Sorted by Office / Jurisdiction
             </span>
           </div>
         </div>
 
-        {/* Table of Users */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100/80 text-slate-600 font-semibold sticky top-0 z-10 border-b border-slate-200">
-              <tr>
-                <th className="py-2.5 px-4">Staff Name & Username</th>
-                <th className="py-2.5 px-3">Position</th>
-                <th className="py-2.5 px-3">Office / Jurisdiction</th>
-                <th className="py-2.5 px-3">RBAC Role</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">Last Login / Activity</th>
-                <th className="py-2.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
+        {/* Users List Container: Mobile Cards (< md) + Desktop Table (>= md) */}
+        <div className="flex-1 overflow-auto bg-slate-50/40 md:bg-white">
+          {/* MOBILE USER CARDS (< 768px) */}
+          <div className="md:hidden p-3 space-y-2.5 pb-6">
+            {filteredUsers.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                <Users className="w-7 h-7 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-semibold text-slate-600">No matching accounts</p>
+                <p className="text-xs mt-0.5">Try clearing your search or role filters.</p>
+              </div>
+            ) : (
+              filteredUsers.map((user) => {
+                const isSuperadminAccount = user.email.toLowerCase() === SUPERADMIN_EMAIL;
+                return (
+                  <div
+                    key={user.id}
+                    className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-2.5"
+                  >
+                    {/* Top: Name & Role/Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-[13.5px] text-slate-900 leading-snug">
+                          {user.firstName} {user.middleInitial} {user.lastName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 break-all">
+                          <span className="font-mono text-slate-700 font-medium">@{user.username}</span>
+                          <span className="mx-1">•</span>
+                          <span>{user.email}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-1">
+                        {user.status === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Pending
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              user.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'
+                              }`}
+                            />
+                            {user.status === 'active' ? 'Active' : 'Deactivated'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Office, Position & RBAC Role */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-semibold border border-slate-200">
+                        <Building className="w-3 h-3 text-slate-500 shrink-0" />
+                        <span>{user.office}</span>
+                      </span>
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                          user.role === 'SUPERADMIN'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                            : user.role === 'ADMIN'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : user.role === 'CLUSTER_DIRECTOR'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : user.role === 'REGIONAL_SUPERVISOR'
+                            ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        {(user.role as string) === 'RANK_AND_FILE' ? 'STANDARD' : user.role}
+                      </span>
+                      {user.hasActiveSession && user.status === 'active' && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                          Online
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-slate-600 flex flex-col gap-0.5">
+                      <span className="font-medium text-slate-700">{user.position}</span>
+                      <span className="text-slate-400">
+                        Last login: {user.lastLogin || 'Never logged in'}
+                        {user.lastActivity ? ` • ${user.lastActivity}` : ''}
+                      </span>
+                    </div>
+
+                    {/* Actions Row */}
+                    <div className="pt-2 border-t border-slate-100">
+                      {isSuperadminAccount ? (
+                        <span className="inline-block text-[10.5px] text-purple-700 font-semibold px-2 py-0.5 bg-purple-50 rounded border border-purple-200">
+                          Root Protected
+                        </span>
+                      ) : confirmingUserAction?.userId === user.id ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 border border-slate-300 px-2.5 py-2 rounded-lg">
+                          <span className="text-[11px] font-semibold text-slate-800">
+                            {confirmingUserAction.type === 'approve'
+                              ? 'Approve & Send Email?'
+                              : confirmingUserAction.type === 'force-logout'
+                              ? 'Force Logout Session?'
+                              : confirmingUserAction.type === 'toggle'
+                              ? user.status === 'active'
+                                ? 'Deactivate Account?'
+                                : 'Reactivate Account?'
+                              : user.status === 'pending'
+                              ? 'Decline Account?'
+                              : 'Delete Account?'}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isProcessingUserAction}
+                              onClick={() => setConfirmingUserAction(null)}
+                              className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-md cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isProcessingUserAction}
+                              onClick={() => {
+                                if (confirmingUserAction.type === 'approve') {
+                                  handleApproveUser(user);
+                                } else if (confirmingUserAction.type === 'force-logout') {
+                                  handleForceLogoutUser(user);
+                                } else if (confirmingUserAction.type === 'toggle') {
+                                  handleToggleStatus(user);
+                                } else {
+                                  handleDeleteUser(user);
+                                }
+                              }}
+                              className={`px-3 py-1.5 text-[11px] font-bold text-white rounded-md cursor-pointer disabled:opacity-50 ${
+                                confirmingUserAction.type === 'approve'
+                                  ? 'bg-emerald-600'
+                                  : confirmingUserAction.type === 'toggle' ||
+                                    confirmingUserAction.type === 'force-logout'
+                                  ? 'bg-amber-600'
+                                  : 'bg-rose-600'
+                              }`}
+                            >
+                              {isProcessingUserAction ? '...' : 'Confirm'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : user.status === 'pending' ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmingUserAction({ userId: user.id, type: 'approve' })
+                            }
+                            className="flex-1 min-h-[38px] px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Approve Account</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmingUserAction({ userId: user.id, type: 'delete' })
+                            }
+                            className="min-h-[38px] px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Decline</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {user.status === 'active' && user.id !== currentUser.id && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmingUserAction({
+                                  userId: user.id,
+                                  type: 'force-logout',
+                                })
+                              }
+                              className="min-h-[36px] px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-amber-50 hover:text-amber-800 border border-slate-200 rounded-lg flex items-center gap-1 cursor-pointer"
+                            >
+                              <LogOut className="w-3.5 h-3.5" />
+                              <span>Force Logout</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmingUserAction({ userId: user.id, type: 'toggle' })
+                            }
+                            className={`min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg border flex items-center gap-1 cursor-pointer ${
+                              user.status === 'active'
+                                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                            }`}
+                          >
+                            {user.status === 'active' ? (
+                              <>
+                                <Ban className="w-3.5 h-3.5" />
+                                <span>Deactivate</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span>Reactivate</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmingUserAction({ userId: user.id, type: 'delete' })
+                            }
+                            className="min-h-[36px] px-2.5 py-1 text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-1 cursor-pointer ml-auto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* DESKTOP TABLE (>= 768px — UNTOUCHED) */}
+          <div className="hidden md:block">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100/80 text-slate-600 font-semibold sticky top-0 z-10 border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4">Staff Name & Username</th>
+                  <th className="py-2.5 px-3">Position</th>
+                  <th className="py-2.5 px-3">Office / Jurisdiction</th>
+                  <th className="py-2.5 px-3">RBAC Role</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Last Login / Activity</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map((user) => {
                 const isSuperadminAccount = user.email.toLowerCase() === SUPERADMIN_EMAIL;
@@ -724,12 +959,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               })}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* ADD USER SUBMODAL */}
         {isAddUserOpen && (
-          <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 animate-in fade-in">
+          <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-2.5 sm:p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 border border-slate-200 animate-in fade-in">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#056839]" />
@@ -737,7 +973,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 </h3>
                 <button
                   onClick={() => setIsAddUserOpen(false)}
-                  className="text-slate-400 hover:text-slate-700"
+                  className="text-slate-400 hover:text-slate-700 p-1"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -758,15 +994,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               )}
 
               <form onSubmit={handleCreateUser} className="space-y-3">
-                <div className="grid grid-cols-5 gap-2">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <div className="sm:col-span-2">
                     <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">First Name *</label>
                     <input
                       type="text"
                       value={newFirstName}
                       onChange={(e) => setNewFirstName(e.target.value)}
                       placeholder="e.g. Dennis"
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                       required
                     />
                   </div>
@@ -778,23 +1014,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       value={newMiddleInitial}
                       onChange={(e) => setNewMiddleInitial(e.target.value.toUpperCase())}
                       placeholder="P."
-                      className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 text-center focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2 py-2 sm:py-1.5 sm:text-center focus:border-[#056839]"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Last Name *</label>
                     <input
                       type="text"
                       value={newLastName}
                       onChange={(e) => setNewLastName(e.target.value)}
                       placeholder="e.g. Neri"
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Username *</label>
                     <input
@@ -802,7 +1038,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="e.g. dneri"
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                       required
                     />
                   </div>
@@ -813,7 +1049,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
                       placeholder="user@fda.gov.ph"
-                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
+                      className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                       required
                     />
                   </div>

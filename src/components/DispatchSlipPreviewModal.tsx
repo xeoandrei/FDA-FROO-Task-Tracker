@@ -147,25 +147,25 @@ export const DispatchSlipPreviewModal: React.FC<DispatchSlipPreviewModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:shadow-none print:border-none print:w-full print:rounded-none">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible">
+      <div className="bg-white rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[96vh] print:max-h-none print:shadow-none print:border-none print:w-full print:rounded-none">
         {/* Top Control Bar */}
-        <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between print:hidden gap-3 flex-wrap">
-          <div className="flex items-center gap-2.5">
-            <span className="bg-[#056839] text-white font-bold tabular-nums text-xs px-2.5 py-0.5 rounded border border-emerald-500/50">
+        <div className="px-3.5 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between print:hidden gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="bg-[#056839] text-white font-bold tabular-nums text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded border border-emerald-500/50 shrink-0">
               CTRL: {slip.ctrlNo}
             </span>
-            <h3 className="font-bold text-sm sm:text-base text-slate-100 flex items-center gap-2">
-              <span>FDA Official Dispatch Slip Preview</span>
+            <h3 className="font-bold text-xs sm:text-base text-slate-100 flex items-center gap-2 truncate">
+              <span className="truncate">Dispatch Slip Preview</span>
               {isMultiPage && (
-                <span className="text-xs font-normal text-emerald-400">
+                <span className="hidden sm:inline text-xs font-normal text-emerald-400">
                   · 2 Pages (Includes Annex A)
                 </span>
               )}
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {onEdit && (
               <button
                 onClick={() => {

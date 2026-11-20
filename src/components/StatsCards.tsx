@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus } from '../types/task';
+import { Task } from '../types/task';
 
 interface StatsCardsProps {
   tasks: Task[];
@@ -55,24 +55,25 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-4 mb-4 md:mb-6">
       {cards.map((card) => {
         const isSelected = activeStatusFilter === card.statusValue;
         return (
           <button
             key={card.title}
+            type="button"
             onClick={() => onSelectStatusFilter(isSelected ? 'All' : card.statusValue)}
-            className={`bg-white rounded-xl p-5 border border-slate-200 border-t-4 ${card.topBorder} text-left transition hover:shadow-md cursor-pointer ${
+            className={`bg-white rounded-xl p-3.5 md:p-5 border border-slate-200 border-t-4 ${card.topBorder} text-left transition hover:shadow-md active:scale-[0.99] cursor-pointer ${
               isSelected ? `${card.activeRing} shadow-md` : ''
             }`}
           >
-            <div className="text-xs text-slate-500 font-medium tracking-wide">
+            <div className="text-[11.5px] md:text-xs text-slate-500 font-medium tracking-wide">
               {card.title}
             </div>
-            <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
+            <div className="text-2xl md:text-3xl font-extrabold text-slate-900 mt-1 md:mt-2 tracking-tight tabular-nums">
               {card.count}
             </div>
-            <div className="text-xs text-slate-400 mt-2 font-normal">
+            <div className="text-[11px] md:text-xs text-slate-400 mt-1 md:mt-2 font-normal truncate">
               {card.subtitle}
             </div>
           </button>

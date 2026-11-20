@@ -35,6 +35,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 import { SystemLogsModal } from './components/SystemLogsModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { ReceiveTaskModal } from './components/ReceiveTaskModal';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
 import {
@@ -745,12 +746,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans overflow-x-hidden">
       {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-20 left-4 right-4 md:left-auto md:bottom-6 md:right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl md:rounded-lg shadow-lg flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+          <span className="leading-snug">{toastMessage}</span>
         </div>
       )}
 
@@ -773,7 +774,7 @@ export default function App() {
       />
 
       {/* Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6">
         {/* Separate Task Views Tabs (My Tasks, Tasks to Receive, All Tasks) */}
         <TaskViewTabs
           activeView={activeView}
@@ -905,6 +906,19 @@ export default function App() {
         userName={`${currentUser.firstName} ${currentUser.lastName}`}
         onStaySignedIn={handleStaySignedIn}
         onSignOutNow={handleLogout}
+      />
+
+      {/* Mobile Fixed Thumb-Zone Bottom Navigation (< 768px) */}
+      <MobileBottomNav
+        activeView={activeView}
+        onSelectView={(v) => {
+          setActiveView(v);
+          setSelectedStatus('All');
+        }}
+        onCreateTask={() => setIsCreateModalOpen(true)}
+        myTasksCount={myTasks.length}
+        tasksToReceiveCount={tasksToReceive.length}
+        allTasksCount={allTasks.length}
       />
     </div>
   );

@@ -479,32 +479,32 @@ export const CreateDispatchModal: React.FC<CreateDispatchModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[95dvh] sm:max-h-[92vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-[#056839] text-white flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider block">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-200 bg-[#056839] text-white flex items-center justify-between gap-2 shrink-0">
+          <div className="min-w-0">
+            <span className="text-[10.5px] sm:text-[11px] font-bold text-emerald-200 uppercase tracking-wider block">
               FDA Official Order
             </span>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <FileText className="w-4 h-4 text-emerald-300" />
-              <span>{existingSlip ? 'Edit Dispatch Slip' : 'Create Dispatch Slip'}</span>
+            <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span className="truncate">{existingSlip ? 'Edit Dispatch Slip' : 'Create Dispatch Slip'}</span>
             </h3>
-            <p className="text-xs text-emerald-100 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-emerald-100 mt-0.5 truncate">
               Task: {task.taskTitle} ({task.region})
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-emerald-100 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+            className="text-emerald-100 hover:text-white p-2 sm:p-1 rounded-md hover:bg-white/10 transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-slate-700 pb-safe">
           {/* Header Info Banner */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-[#056839] shrink-0 mt-0.5" />

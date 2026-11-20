@@ -21,30 +21,31 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-0 md:p-4">
+      <div className="bg-white rounded-none md:rounded-2xl shadow-2xl border-0 md:border border-slate-200 w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col h-[100dvh] md:h-auto md:max-h-[90vh]">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-emerald-950 via-[#056839] to-emerald-950 text-white flex items-center justify-between">
-          <div>
+        <div className="px-4 py-4 md:px-6 md:py-5 border-b border-slate-200 bg-gradient-to-r from-emerald-950 via-[#056839] to-emerald-950 text-white flex items-center justify-between gap-2 shrink-0">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-amber-400" />
-              <h3 className="text-lg font-bold">FROO Regional Field Offices Directory & Caseload</h3>
+              <Building2 className="w-5 h-5 text-amber-400 shrink-0" />
+              <h3 className="text-sm sm:text-lg font-bold truncate">FROO Regional Offices & Caseload</h3>
             </div>
-            <p className="text-xs text-slate-300 mt-1">
+            <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 sm:mt-1">
               Live operational workload across all 16 Regional Offices and FROO / FDA offices.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
+            className="text-slate-300 hover:text-white p-2 sm:p-1.5 rounded-lg hover:bg-white/10 transition shrink-0"
+            aria-label="Close Regional Overview"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Table / Cards */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-3.5 md:p-6 overflow-y-auto space-y-4 flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {FROO_OFFICES.map((office) => {
               // Match tasks either by region (including comma-separated multi-select) or assignedOffice
@@ -137,11 +138,11 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>All 16 Regional Offices & FROO / FDA Offices covered</span>
+        <div className="px-4 py-3.5 md:px-6 md:py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2 text-xs text-slate-500 shrink-0 pb-safe">
+          <span className="truncate">All 16 Regional & FROO Offices covered</span>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer"
+            className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer shrink-0"
           >
             Close
           </button>

@@ -37,26 +37,26 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-2xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-2xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-emerald-950 via-[#056839] to-emerald-950 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border border-white/20">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 bg-gradient-to-r from-emerald-950 via-[#056839] to-emerald-950 text-white flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border border-white/20 shrink-0">
               <CheckCircle2 className="w-5 h-5 text-emerald-300" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold tracking-tight text-white">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold tracking-tight text-white truncate">
                 Confirm Task Acceptance
               </h3>
-              <p className="text-[11px] text-emerald-200/90">
+              <p className="text-[11px] text-emerald-200/90 truncate">
                 FDA Field Regulatory Operations Office • Official Receipt
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-white/70 hover:text-white p-1 rounded-md hover:bg-white/10 transition cursor-pointer"
+            className="text-white/70 hover:text-white p-2 sm:p-1 rounded-md hover:bg-white/10 transition cursor-pointer shrink-0"
             title="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -64,7 +64,7 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-4 text-xs">
+        <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
           {/* Validation Error / Warning if not allowed */}
           {!validation.allowed && (
             <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-xl flex items-start gap-2.5">
@@ -149,11 +149,11 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
         </div>
 
         {/* Modal Actions */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 sm:gap-3 shrink-0 pb-safe">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+            className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition cursor-pointer"
           >
             No, Cancel
           </button>
@@ -161,7 +161,7 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
             type="button"
             disabled={!validation.allowed}
             onClick={handleConfirm}
-            className={`px-5 py-2 text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+            className={`flex-1 sm:flex-none px-5 py-2.5 sm:py-2 text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer ${
               validation.allowed
                 ? 'bg-[#056839] hover:bg-[#04522d] text-white cursor-pointer active:scale-98'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'

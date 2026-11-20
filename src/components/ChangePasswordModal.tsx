@@ -107,30 +107,30 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#056839] text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 bg-[#056839] text-white flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
               <KeyRound className="w-4 h-4 text-emerald-200" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Change Account Password</h3>
-              <p className="text-[11px] text-emerald-100">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-white truncate">Change Account Password</h3>
+              <p className="text-[11px] text-emerald-100 truncate">
                 {currentUser.firstName} {currentUser.lastName} ({currentUser.email})
               </p>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="text-emerald-100 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+            className="text-emerald-100 hover:text-white p-2 sm:p-1 rounded-md hover:bg-white/10 transition shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs text-slate-700">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs text-slate-700">
           {error && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />

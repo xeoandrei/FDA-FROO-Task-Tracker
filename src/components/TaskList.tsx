@@ -2,7 +2,7 @@ import React from 'react';
 import { Task, TaskStatus, TaskPriority } from '../types/task';
 import { formatDate } from '../utils/storage';
 import { splitAssigneeNames, isNameSuffixToken } from '../utils/taskAuthorization';
-import { ChevronRight, Building2 } from 'lucide-react';
+import { ChevronRight, Building2, Calendar, User } from 'lucide-react';
 
 interface TaskListProps {
   tasks: Task[];
@@ -161,18 +161,157 @@ export const TaskList: React.FC<TaskListProps> = ({
     }
   };
 
+  const emptyMessage =
+    activeView === 'MY_TASKS'
+      ? 'You currently have no tasks assigned or requiring your direct action in this filter.'
+      : activeView === 'TASKS_TO_RECEIVE'
+      ? 'No dispatched tasks currently awaiting receipt by authorized recipient.'
+      : 'No operational tasks in this scope or matching your filters.';
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-      <div className="p-4 sm:px-5 sm:py-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Task List</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h2 className="text-sm md:text-base font-bold text-slate-900">Task List</h2>
+          <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
             Showing {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
           </p>
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto">
+      {/* ================= MOBILE TOUCH-FRIENDLY TASK CARDS (< 768px) ================= */}
+      <div className="md:hidden">
+        {tasks.length === 0 ? (
+          <div className="py-12 px-5 text-center text-slate-400">
+            <p className="text-sm font-semibold text-slate-700">No tasks found</p>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{emptyMessage}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {tasks.map((task) => {
+              const isSelected = selectedTaskId === task.id;
+              const shortAssignees = formatShortAssigneeList(task.assignedTo);
+              const shortReceiver = task.receivedBy ? formatShortPersonName(task.receivedBy) : '';
+
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => onSelectTask(task)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectTask(task);
+                    }
+                  }}
+                  className={`p-4 space-y-2.5 transition active:bg-slate-50 cursor-pointer ${
+                    isSelected ? 'bg-emerald-50/60' : 'bg-white'
+                  }`}
+                >
+                  {/* Row 1: Complete Task Title + Priority */}
+                  <div className="flex items-start justify-between gap-2.5">
+                    <h3 className="text-[14px] font-bold text-[#056839] leading-snug break-words flex-1">
+                      {task.taskTitle}
+                    </h3>
+                    <div className="shrink-0 pt-0.5">{getPriorityBadge(task.priority)}</div>
+                  </div>
+
+                  {/* Row 2: Clean Metadata (DTN · Category · Origin · Office) */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-slate-500">
+                    {task.dtn && (
+                      <>
+                        <span className="font-mono text-emerald-800 font-semibold tabular-nums">
+                          DTN {task.dtn}
+                        </span>
+                        <span className="text-slate-300" aria-hidden="true">
+                          ·
+                        </span>
+                      </>
+                    )}
+                    <span className="font-medium text-slate-700">{task.category}</span>
+                    <span className="text-slate-300" aria-hidden="true">
+                      ·
+                    </span>
+                    <span>{task.origin}</span>
+                  </div>
+
+                  {/* Row 3: Office, Assigned To, Due Date */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                        <User className="w-3 h-3 shrink-0" />
+                        <span>Assigned To</span>
+                      </div>
+                      <div className="font-semibold text-slate-800 leading-snug break-words">
+                        {shortAssignees}
+                      </div>
+                      {task.status === 'Open' && !task.receivedAt ? (
+                        <div className="text-[10.5px] text-amber-700 font-semibold">
+                          Awaiting Receipt
+                        </div>
+                      ) : task.receivedBy ? (
+                        <div className="text-[10.5px] text-emerald-700 truncate">
+                          Recv: {shortReceiver}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="min-w-0 space-y-1">
+                      <div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                          <Calendar className="w-3 h-3 shrink-0" />
+                          <span>Due Date</span>
+                        </div>
+                        <div className="font-medium text-slate-700 tabular-nums">
+                          {formatDate(task.dueDate)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{task.region}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 4: Status, Logs/Dispatch counts, Receive CTA & Details Chevron */}
+                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      {getStatusBadge(task.status)}
+                      <span className="text-[11px] text-slate-400 tabular-nums">
+                        {task.activityHistory?.length || 0} logs
+                        {task.dispatchSlips && task.dispatchSlips.length > 0
+                          ? ` · ${task.dispatchSlips.length} dispatch`
+                          : ''}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {task.status === 'Open' && !task.receivedAt && onReceiveTask && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onReceiveTask(task);
+                          }}
+                          className="min-h-[36px] px-3.5 text-xs bg-[#056839] hover:bg-[#04522d] text-white rounded-lg font-bold transition cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
+                          title="Confirm receipt and accept this task"
+                        >
+                          Receive
+                        </button>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ================= DESKTOP 6-COLUMN TABLE (>= 768px — UNCHANGED) ================= */}
+      <div className="hidden md:block w-full overflow-x-auto">
         <table className="w-full text-left border-collapse lg:table-fixed">
           <thead>
             <tr className="border-b border-slate-200/80 bg-slate-50/70 text-xs font-semibold text-slate-700 tracking-wide">
@@ -190,13 +329,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                 <td colSpan={6} className="py-12 text-center text-slate-400">
                   <div className="max-w-xs mx-auto text-center">
                     <p className="text-sm font-semibold text-slate-700">No tasks found</p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {activeView === 'MY_TASKS'
-                        ? 'You currently have no tasks assigned or requiring your direct action in this filter.'
-                        : activeView === 'TASKS_TO_RECEIVE'
-                        ? 'No dispatched tasks currently awaiting receipt by authorized recipient.'
-                        : 'No operational tasks in this scope or matching your filters.'}
-                    </p>
+                    <p className="text-xs text-slate-400 mt-1">{emptyMessage}</p>
                   </div>
                 </td>
               </tr>
@@ -274,7 +407,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                     </td>
 
                     {/* Due Date */}
-                    <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
+                    <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap tabular-nums">
                       {formatDate(task.dueDate)}
                     </td>
 
