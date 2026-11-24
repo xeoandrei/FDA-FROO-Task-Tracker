@@ -1,7 +1,9 @@
 import React from 'react';
-import { X, Building2, ExternalLink, ShieldCheck, MapPin, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { X, Building2, ExternalLink } from 'lucide-react';
 import { FROO_OFFICES } from '../data/offices';
-import { Task, FrooOffice } from '../types/task';
+import { Task } from '../types/task';
+import { useSystemConfig } from '../utils/systemConfigStorage';
+import { doesRegionMatch } from '../utils/taskAuthorization';
 
 interface RegionalOverviewModalProps {
   isOpen: boolean;
@@ -9,6 +11,7 @@ interface RegionalOverviewModalProps {
   tasks: Task[];
   onSelectOfficeFilter: (officeCode: string) => void;
   currentOfficeFilter: string;
+  allowedRegions?: string[];
 }
 
 export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
@@ -17,7 +20,17 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
   tasks,
   onSelectOfficeFilter,
   currentOfficeFilter,
+  allowedRegions,
 }) => {
+  const [systemConfig] = useSystemConfig();
+  const allOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
+  const dynamicOffices =
+    allowedRegions && allowedRegions.length > 0
+      ? allOffices.filter((o) =>
+          allowedRegions.some((ar) => doesRegionMatch(o.code, ar) || doesRegionMatch(o.name, ar))
+        )
+      : allOffices;
+
   if (!isOpen) return null;
 
   return (
@@ -32,7 +45,7 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
               <h3 className="text-sm sm:text-lg font-bold truncate">FROO Regional Offices & Caseload</h3>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 sm:mt-1">
-              Live operational workload across all 16 Regional Offices and FROO / FDA offices.
+              Live operational workload across {dynamicOffices.length} authorized Regional &amp; FROO offices.
             </p>
           </div>
           <button
@@ -47,24 +60,13 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
         {/* Content Table / Cards */}
         <div className="p-3.5 md:p-6 overflow-y-auto space-y-4 flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {FROO_OFFICES.map((office) => {
+            {dynamicOffices.map((office) => {
               // Match tasks either by region (including comma-separated multi-select) or assignedOffice
-              const officeTasks = tasks.filter((t) => {
-                const regionParts = (t.region || '')
-                  .split(',')
-                  .map((r) => r.trim().toLowerCase())
-                  .filter(Boolean);
-                const codeLower = office.code.toLowerCase();
-                const shortLower = office.shortLabel.toLowerCase();
-                const nameLower = office.name.toLowerCase();
-                return (
-                  regionParts.includes(codeLower) ||
-                  regionParts.includes(shortLower) ||
-                  regionParts.includes(nameLower) ||
-                  t.assignedOffice === office.shortLabel ||
-                  t.assignedOffice === office.name
-                );
-              });
+              const officeTasks = tasks.filter(
+                (t) =>
+                  doesRegionMatch(t.region, office.code) ||
+                  (t.assignedOffice ? doesRegionMatch(t.assignedOffice, office.code) : false)
+              );
 
               const openCount = officeTasks.filter((t) => t.status === 'Open').length;
               const inProgressCount = officeTasks.filter((t) => t.status === 'In Progress').length;
@@ -139,7 +141,9 @@ export const RegionalOverviewModal: React.FC<RegionalOverviewModalProps> = ({
 
         {/* Footer */}
         <div className="px-4 py-3.5 md:px-6 md:py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2 text-xs text-slate-500 shrink-0 pb-safe">
-          <span className="truncate">All 16 Regional & FROO Offices covered</span>
+          <span className="truncate">
+            Showing {dynamicOffices.length} authorized {dynamicOffices.length === 1 ? 'Regional Office' : 'Regional & FROO Offices'}
+          </span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-100 cursor-pointer shrink-0"

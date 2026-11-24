@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db';
 import { hashPassword, comparePassword, generateToken, authenticateToken, AuthenticatedRequest } from '../auth';
 import { sendAccountRegistrationEmails } from '../services/emailService';
+import { getLiveSystemConfig } from './referenceRoutes';
 
 const router = Router();
 
@@ -64,6 +65,30 @@ async function resolveOfficeAndCluster(officeInput: string): Promise<{ officeCod
     return { officeCode: likeRows[0].office_code, clusterCode: likeRows[0].cluster_code || null };
   }
 
+  // 4. Check if office was dynamically added by Superadmin in System Configuration
+  const liveConfig = await getLiveSystemConfig();
+  const matchedDynamicOffice = Array.isArray(liveConfig?.offices)
+    ? liveConfig.offices.find(
+        (o: any) =>
+          String(o?.code || '').toLowerCase() === trimmed.toLowerCase() ||
+          String(o?.name || '').toLowerCase() === trimmed.toLowerCase() ||
+          String(o?.shortLabel || '').toLowerCase() === trimmed.toLowerCase()
+      )
+    : null;
+
+  if (matchedDynamicOffice) {
+    const officeCode = String(matchedDynamicOffice.code).trim();
+    const officeName = String(matchedDynamicOffice.name || officeCode).trim();
+    const officeType = officeCode.toUpperCase().includes('ODDG') ? 'CENTRAL' : 'REGIONAL';
+    await pool
+      .query(
+        `INSERT IGNORE INTO offices (office_code, office_name, office_type, is_active) VALUES (?, ?, ?, 1)`,
+        [officeCode, officeName, officeType]
+      )
+      .catch(() => {});
+    return { officeCode, clusterCode: null };
+  }
+
   return null;
 }
 
@@ -94,13 +119,26 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
     }
 
+    // Check live dynamic positions configured by Superadmin
+    const liveConfig = await getLiveSystemConfig();
+    const matchedPos = Array.isArray(liveConfig?.positions)
+      ? liveConfig.positions.find(
+          (p: any) => String(p?.title || '').trim().toLowerCase() === position.trim().toLowerCase()
+        )
+      : null;
+
     // Role-based privilege protection:
-    // Reject self-assignment to SUPERADMIN or ADMIN or ODDG-FROO headquarters via public registration
+    // Reject self-assignment to SUPERADMIN, ADMIN, or CLUSTER_DIRECTOR via public registration
     const isOddgOffice = office.trim().toUpperCase() === 'ODDG-FROO' || office.toLowerCase().includes('oddg-froo');
     const isExecutivePosition =
       position.includes('Deputy Director General') ||
       position.includes('ODDG-FROO Staff') ||
-      position === 'Cluster Director';
+      position === 'Cluster Director' ||
+      (matchedPos &&
+        (matchedPos.selfRegisterAllowed === false ||
+          matchedPos.defaultRole === 'ADMIN' ||
+          matchedPos.defaultRole === 'CLUSTER_DIRECTOR' ||
+          matchedPos.defaultRole === 'SUPERADMIN'));
 
     if (isOddgOffice || isExecutivePosition || trimmedEmail === 'amldelgado@fda.gov.ph') {
       return res.status(403).json({
@@ -116,10 +154,12 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Server-enforced RBAC role:
-    // Regional Supervisors get REGIONAL_SUPERVISOR; field inspectors/staff get STANDARD
+    // Server-enforced RBAC role from Superadmin position mapping (Regional Supervisors get REGIONAL_SUPERVISOR; field staff get STANDARD)
     let assignedRole = 'STANDARD';
-    if (position === 'Regional Supervisor') {
+    if (
+      position === 'Regional Supervisor' ||
+      matchedPos?.defaultRole === 'REGIONAL_SUPERVISOR'
+    ) {
       assignedRole = 'REGIONAL_SUPERVISOR';
     }
 

@@ -20,7 +20,7 @@ import {
   saveStoredUsers,
   logSystemAction,
 } from './utils/authStorage';
-import { FROO_CLUSTERS, getRegionsForCluster } from './data/clusters';
+import { FROO_CLUSTERS, getRegionsForCluster, resolveUserClusterCode } from './data/clusters';
 import { FROO_OFFICES } from './data/offices';
 
 import { LandingPage } from './components/LandingPage';
@@ -38,6 +38,11 @@ import { TaskViewTabs, TaskViewType } from './components/TaskViewTabs';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ReceiveTaskModal } from './components/ReceiveTaskModal';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
+import { WorkspaceSidebar } from './components/WorkspaceSidebar';
+import { FisDoctrackModule } from './components/FisDoctrackModule';
+import { SystemConfigModule } from './components/SystemConfigModule';
+import { WorkspaceModuleType, FisConnectionMode } from './types/doctrack';
+import { useSystemConfig, saveStoredSystemConfig } from './utils/systemConfigStorage';
 import {
   isUserAssignedToTask,
   isUserCreatedTask,
@@ -56,6 +61,8 @@ export default function App() {
   // Current authenticated user session
   const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => getCurrentUser());
   const [allStaffUsers, setAllStaffUsers] = useState<UserAccount[]>(() => getStoredUsers());
+  const [systemConfig] = useSystemConfig();
+  const dynamicOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
 
   // Task data
   const [tasks, setTasks] = useState<Task[]>(() => getStoredTasks());
@@ -70,6 +77,10 @@ export default function App() {
   const [isSystemLogsOpen, setIsSystemLogsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Workspace module state
+  const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<WorkspaceModuleType>('TASKS');
+  const [fisConnectionMode, setFisConnectionMode] = useState<FisConnectionMode>('LOCAL_TEST');
 
   // Task views state (Defaults to 'MY_TASKS' per user specification)
   const [activeView, setActiveView] = useState<TaskViewType>('MY_TASKS');
@@ -139,10 +150,15 @@ export default function App() {
         if (health && health.status === 'ok') {
           if (isMounted) setDbStatus('online');
 
-          const [usersRes, tasksRes] = await Promise.allSettled([
+          const [usersRes, tasksRes, configRes] = await Promise.allSettled([
             api.getUsers(),
             api.getTasks(),
+            api.getSystemConfig(),
           ]);
+
+          if (isMounted && configRes.status === 'fulfilled' && configRes.value) {
+            saveStoredSystemConfig(configRes.value);
+          }
 
           if (isMounted && usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
             saveStoredUsers(usersRes.value);
@@ -281,7 +297,7 @@ export default function App() {
   const { allowedRegions, defaultRegionFilter, scopeLabel } = useMemo(() => {
     if (!currentUser) {
       return {
-        allowedRegions: FROO_OFFICES.map((o) => o.code),
+        allowedRegions: dynamicOffices.map((o) => o.code),
         defaultRegionFilter: 'All',
         scopeLabel: 'Public Overview',
       };
@@ -289,17 +305,14 @@ export default function App() {
 
     if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') {
       return {
-        allowedRegions: FROO_OFFICES.map((o) => o.code),
+        allowedRegions: dynamicOffices.map((o) => o.code),
         defaultRegionFilter: 'All',
-        scopeLabel: 'National Scope (ODDG-FROO & All 16 Regional Offices)',
+        scopeLabel: `National Scope (ODDG-FROO & All ${dynamicOffices.length} Regional Offices)`,
       };
     }
 
     if (currentUser.role === 'CLUSTER_DIRECTOR') {
-      const clusterKey = currentUser.cluster || (Object.keys(FROO_CLUSTERS) as ClusterCode[]).find((code) =>
-        currentUser.office.includes(code)
-      ) || 'NLC';
-
+      const clusterKey = resolveUserClusterCode(currentUser);
       const clusterInfo = FROO_CLUSTERS[clusterKey];
       const regions = clusterInfo ? clusterInfo.regions : [];
 
@@ -317,7 +330,7 @@ export default function App() {
       defaultRegionFilter: 'All',
       scopeLabel: `${userRegion} Field Jurisdiction`,
     };
-  }, [currentUser]);
+  }, [currentUser, dynamicOffices]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -332,6 +345,13 @@ export default function App() {
     setSelectedRegion(defaultRegionFilter);
   }, [defaultRegionFilter]);
 
+  // Ensure non-superadmin users never stay on the SYSTEM_CONFIG workspace module
+  useEffect(() => {
+    if (activeWorkspaceModule === 'SYSTEM_CONFIG' && currentUser?.role !== 'SUPERADMIN') {
+      setActiveWorkspaceModule('TASKS');
+    }
+  }, [activeWorkspaceModule, currentUser?.role]);
+
   // Login handler
   const handleLoginSuccess = async (user: UserAccount) => {
     lastActivityRef.current = Date.now();
@@ -339,6 +359,9 @@ export default function App() {
     setSessionLogoutReason(null);
     setCurrentUserState(user);
     setActiveView('MY_TASKS');
+    if (user.role !== 'SUPERADMIN' && activeWorkspaceModule === 'SYSTEM_CONFIG') {
+      setActiveWorkspaceModule('TASKS');
+    }
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
 
     // Fetch fresh task and user list with the authenticated token
@@ -423,7 +446,11 @@ export default function App() {
       if (!currentUser) return true;
       if (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') return true;
       if (isUserAssignedToTask(task, currentUser) || isUserCreatedTask(task, currentUser)) return true;
-      return allowedRegions.some((ar) => doesRegionMatch(task.region, ar));
+      return allowedRegions.some(
+        (ar) =>
+          doesRegionMatch(task.region, ar) ||
+          (task.assignedOffice ? doesRegionMatch(task.assignedOffice, ar) : false)
+      );
     });
   }, [tasks, currentUser, allowedRegions]);
 
@@ -560,7 +587,7 @@ export default function App() {
   };
 
   // Task creation
-  const handleCreateTask = async (newTask: Task) => {
+  const handleCreateTask = async (newTask: Task, syncToFis = true) => {
     try {
       const created = await api.createTask({
         taskTitle: newTask.taskTitle,
@@ -576,6 +603,7 @@ export default function App() {
         priority: newTask.priority,
         dtn: newTask.dtn,
         isManualCreate: true,
+        syncToFis,
       });
 
       if (created) {
@@ -585,7 +613,11 @@ export default function App() {
           saveStoredTasks(next);
           return next;
         });
-        showToast(`Task "${created.taskTitle}" saved and assigned to ${created.assignedTo}.`);
+        showToast(
+          syncToFis && created.dtn && /^\d{14}$/.test(created.dtn)
+            ? `Task "${created.taskTitle}" created & logged to FDA FIS Doctrack.`
+            : `Task "${created.taskTitle}" saved and assigned to ${created.assignedTo}.`
+        );
         return;
       }
     } catch (err: any) {
@@ -672,7 +704,7 @@ export default function App() {
   };
 
   // Confirmed Receive Task handler with validation, identity & timestamp recording
-  const handleConfirmAcceptTask = async (taskToReceive: Task) => {
+  const handleConfirmAcceptTask = async (taskToReceive: Task, syncToFis = true) => {
     const validation = validateCanReceiveTask(taskToReceive, currentUser);
     if (!validation.allowed) {
       showToast(validation.reason || 'You are not authorized to receive this task.');
@@ -682,14 +714,18 @@ export default function App() {
 
     if (dbStatus === 'online') {
       try {
-        const updated = await api.receiveTask(taskToReceive.id);
+        const updated = await api.receiveTask(taskToReceive.id, syncToFis);
         if (updated) {
           setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
           if (selectedTask?.id === updated.id) {
             setSelectedTask(updated);
           }
           setTaskToConfirmReceive(null);
-          showToast(`Task "${updated.taskTitle}" officially received & accepted into MySQL execution.`);
+          showToast(
+            syncToFis && updated.dtn && /^\d{14}$/.test(updated.dtn)
+              ? `Task "${updated.taskTitle}" received & receipt logged to FDA FIS Doctrack.`
+              : `Task "${updated.taskTitle}" officially received & accepted into execution.`
+          );
           return;
         }
       } catch (err: any) {
@@ -771,69 +807,113 @@ export default function App() {
         scopeLabel={scopeLabel}
         allStaffUsers={allStaffUsers}
         dbStatus={dbStatus}
+        activeWorkspaceModule={activeWorkspaceModule}
+        onSelectWorkspaceModule={setActiveWorkspaceModule}
       />
 
-      {/* Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6">
-        {/* Separate Task Views Tabs (My Tasks, Tasks to Receive, All Tasks) */}
-        <TaskViewTabs
-          activeView={activeView}
-          onSelectView={(v) => {
-            setActiveView(v);
-            setSelectedStatus('All');
-          }}
-          myTasksCount={myTasks.length}
+      {/* Workspace Body with Left Collapsible Sidebar Rail on Desktop */}
+      <div className="flex-1 flex min-h-0">
+        <WorkspaceSidebar
+          activeModule={activeWorkspaceModule}
+          onSelectModule={setActiveWorkspaceModule}
+          totalTasksCount={allTasks.length}
           tasksToReceiveCount={tasksToReceive.length}
-          allTasksCount={allTasks.length}
+          fisConnectionMode={fisConnectionMode}
+          isSuperAdmin={currentUser.role === 'SUPERADMIN'}
         />
 
-        {/* Metric Cards - counts reflect active view base tasks */}
-        <StatsCards
-          tasks={activeViewTasks}
-          activeStatusFilter={selectedStatus}
-          onSelectStatusFilter={setSelectedStatus}
-        />
+        {/* Main Body */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6 min-w-0">
+          {activeWorkspaceModule === 'SYSTEM_CONFIG' && currentUser.role === 'SUPERADMIN' ? (
+            <SystemConfigModule
+              currentUser={currentUser}
+              onShowToast={showToast}
+            />
+          ) : activeWorkspaceModule === 'FIS_DOCTRACK' ? (
+            <FisDoctrackModule
+              currentUser={currentUser}
+              tasks={tasks}
+              onBackToTasks={() => setActiveWorkspaceModule('TASKS')}
+              onOpenTaskDetails={(task) => setSelectedTask(task)}
+              onTasksSynced={async () => {
+                try {
+                  const remoteTasks = await api.getTasks();
+                  if (Array.isArray(remoteTasks)) {
+                    const merged = await syncTasksFromBackend(remoteTasks);
+                    setTasks(merged);
+                    saveStoredTasks(merged);
+                  }
+                } catch {
+                  // Ignore refresh error
+                }
+              }}
+              onShowToast={showToast}
+              onConnectionModeChange={setFisConnectionMode}
+            />
+          ) : (
+            <>
+              {/* Separate Task Views Tabs (My Tasks, Tasks to Receive, All Tasks) */}
+              <TaskViewTabs
+                activeView={activeView}
+                onSelectView={(v) => {
+                  setActiveView(v);
+                  setSelectedStatus('All');
+                }}
+                myTasksCount={myTasks.length}
+                tasksToReceiveCount={tasksToReceive.length}
+                allTasksCount={allTasks.length}
+              />
 
-        {/* Filters Bar (matching screenshot 1) */}
-        <FiltersBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          selectedOrigin={selectedOrigin}
-          onOriginChange={setSelectedOrigin}
-          selectedRegion={selectedRegion}
-          onRegionChange={setSelectedRegion}
-          selectedStatus={selectedStatus}
-          onStatusChange={setSelectedStatus}
-          selectedPriority={selectedPriority}
-          onPriorityChange={setSelectedPriority}
-          onResetFilters={handleResetFilters}
-          hasActiveFilters={hasActiveFilters}
-          allowedRegions={allowedRegions}
-          userRole={currentUser.role}
-          scopeLabel={scopeLabel}
-        />
+              {/* Metric Cards - counts reflect active view base tasks */}
+              <StatsCards
+                tasks={activeViewTasks}
+                activeStatusFilter={selectedStatus}
+                onSelectStatusFilter={setSelectedStatus}
+              />
 
-        {/* Task List (matching screenshot 1 with Receive button and details drawer trigger) */}
-        <TaskList
-          tasks={filteredTasks}
-          onSelectTask={(task) => setSelectedTask(task)}
-          selectedTaskId={selectedTask?.id}
-          onReceiveTask={handlePromptReceiveTask}
-          currentUserName={`${currentUser.firstName} ${currentUser.lastName}`}
-          activeView={activeView}
-        />
+              {/* Filters Bar (matching screenshot 1) */}
+              <FiltersBar
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+                selectedOrigin={selectedOrigin}
+                onOriginChange={setSelectedOrigin}
+                selectedRegion={selectedRegion}
+                onRegionChange={setSelectedRegion}
+                selectedStatus={selectedStatus}
+                onStatusChange={setSelectedStatus}
+                selectedPriority={selectedPriority}
+                onPriorityChange={setSelectedPriority}
+                onResetFilters={handleResetFilters}
+                hasActiveFilters={hasActiveFilters}
+                allowedRegions={allowedRegions}
+                userRole={currentUser.role}
+                scopeLabel={scopeLabel}
+              />
 
-        {/* Footer Note */}
-        <div className="mt-8 pt-4 border-t border-slate-200 text-center text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#056839]" />
-            <span>Field Regulatory Operations Office (FROO) Task Tracking Portal</span>
+              {/* Task List (matching screenshot 1 with Receive button and details drawer trigger) */}
+              <TaskList
+                tasks={filteredTasks}
+                onSelectTask={(task) => setSelectedTask(task)}
+                selectedTaskId={selectedTask?.id}
+                onReceiveTask={handlePromptReceiveTask}
+                currentUserName={`${currentUser.firstName} ${currentUser.lastName}`}
+                activeView={activeView}
+              />
+            </>
+          )}
+
+          {/* Footer Note */}
+          <div className="mt-8 pt-4 border-t border-slate-200 text-center text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#056839]" />
+              <span>Field Regulatory Operations Office (FROO) Task Tracking Portal</span>
+            </div>
+            <div>Food and Drug Administration Philippines • Department of Health</div>
           </div>
-          <div>Food and Drug Administration Philippines • Department of Health</div>
-        </div>
-      </main>
+        </main>
+      </div>
 
       {/* Create Task Modal (matching screenshot 2) */}
       <CreateTaskModal
@@ -871,9 +951,10 @@ export default function App() {
       <RegionalOverviewModal
         isOpen={isRegionalOverviewOpen}
         onClose={() => setIsRegionalOverviewOpen(false)}
-        tasks={tasks}
+        tasks={jurisdictionTasks}
         onSelectOfficeFilter={(code) => setSelectedRegion(code)}
         currentOfficeFilter={selectedRegion}
+        allowedRegions={allowedRegions}
       />
 
       {/* User Management Modal (Admin & Superadmin only) */}
@@ -912,6 +993,7 @@ export default function App() {
       <MobileBottomNav
         activeView={activeView}
         onSelectView={(v) => {
+          setActiveWorkspaceModule('TASKS');
           setActiveView(v);
           setSelectedStatus('All');
         }}

@@ -5,11 +5,13 @@ import { UserAccount } from '../types/auth';
 import { CATEGORIES, ORIGINS, PRIORITIES, FROO_OFFICES } from '../data/offices';
 import { formatDateTime } from '../utils/storage';
 import { getStoredUsers } from '../utils/authStorage';
+import { useSystemConfig } from '../utils/systemConfigStorage';
+import { doesRegionMatch } from '../utils/taskAuthorization';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (newTask: Task) => void;
+  onCreate: (newTask: Task, syncToFis?: boolean) => void;
   currentPersona?: FrooUserPersona;
   currentUser?: UserAccount | null;
   allowedRegions?: string[];
@@ -29,28 +31,43 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     ? `${currentUser.firstName} ${currentUser.lastName}`
     : currentPersona?.name || 'Authorized Officer';
   const creatorOffice = currentUser?.office || currentPersona?.officeName || 'ODDG-FROO';
+  const shortCreatorAlias = currentUser
+    ? `${currentUser.firstName.trim().charAt(0).toUpperCase()}. ${currentUser.lastName.trim()}`
+    : creatorName;
 
-  // Available Regions / Offices based on jurisdiction
+  const [systemConfig] = useSystemConfig();
+  const dynamicCategories = systemConfig.categories?.length ? systemConfig.categories : CATEGORIES;
+  const dynamicOrigins = systemConfig.origins?.length ? systemConfig.origins : ORIGINS;
+  const dynamicOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
+
+  // Available Regions / Offices based on jurisdiction (strictly matched so Region 1 never matches Region 10..13)
   const availableOffices = allowedRegions && allowedRegions.length > 0
-    ? FROO_OFFICES.filter((o) =>
+    ? dynamicOffices.filter((o) =>
         allowedRegions.some(
-          (ar) =>
-            ar.toLowerCase() === o.code.toLowerCase() ||
-            ar.toLowerCase() === o.name.toLowerCase() ||
-            o.code.toLowerCase().includes(ar.toLowerCase())
+          (ar) => doesRegionMatch(o.code, ar) || doesRegionMatch(o.name, ar)
         )
       )
-    : FROO_OFFICES;
+    : dynamicOffices;
 
-  // Staff users list for Assigned To multi-select
+  // Staff users list for Assigned To multi-select (scoped to allowedRegions for Cluster Directors & Regional Staff)
   const staffList = allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers();
-  const activeStaff = staffList.filter((u) => u.status === 'active' || (!u.status && u.status !== 'deactivated'));
+  const isGlobalAdmin = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
+  const activeStaff = staffList.filter((u) => {
+    const isActive = u.status === 'active' || (!u.status && u.status !== 'deactivated');
+    if (!isActive) return false;
+    if (isGlobalAdmin || !allowedRegions || allowedRegions.length === 0) return true;
+    return (
+      allowedRegions.some((ar) => doesRegionMatch(u.office, ar)) ||
+      (currentUser?.office ? doesRegionMatch(u.office, currentUser.office) : false)
+    );
+  });
 
   const [dtn, setDtn] = useState('');
   const [isDtnNa, setIsDtnNa] = useState(false);
+  const [syncToFis, setSyncToFis] = useState(true);
   const [taskTitle, setTaskTitle] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0]);
-  const [origin, setOrigin] = useState('FROO');
+  const [category, setCategory] = useState(dynamicCategories[0] || CATEGORIES[0]);
+  const [origin, setOrigin] = useState(dynamicOrigins[0] || 'FROO');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -157,6 +174,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     const assignedToCombined = selectedAssignees.join(', ');
     const newId = `FROO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const todayFormatted = formatDateTime(new Date());
+    const shouldWriteFis = !isDtnNa && /^\d{14}$/.test(finalDtn) && syncToFis;
+    const initialNoteBase = description.trim()
+      ? `Direct task assignment: ${description.trim().slice(0, 100)}`
+      : 'Initial task endorsement';
 
     const newTask: Task = {
       id: newId,
@@ -185,17 +206,18 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           actor: creatorName,
           actorOffice: creatorOffice,
           date: todayFormatted,
-          notes: description.trim() ? `Direct task assignment: ${description.trim().slice(0, 100)}` : undefined,
+          notes: shouldWriteFis ? `${initialNoteBase} • [Logged to FDA FIS Doctrack]` : initialNoteBase,
         },
       ],
     };
 
-    onCreate(newTask);
+    onCreate(newTask, shouldWriteFis);
     onClose();
 
     // Reset state
     setDtn('');
     setIsDtnNa(false);
+    setSyncToFis(true);
     setTaskTitle('');
     setSelectedAssignees([]);
     setAssigneeSearchQuery('');
@@ -289,6 +311,26 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 ? 'DTN marked as N/A (Not Applicable) for this task.'
                 : 'Locked to 14 numeric digits per official FDA Philippines document tracking system, or check N/A if none.'}
             </p>
+
+            {/* Automatic FIS Doctrack Logging Option when DTN is entered */}
+            {!isDtnNa && (
+              <label className="mt-2 flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={syncToFis}
+                  onChange={(e) => setSyncToFis(e.target.checked)}
+                  className="mt-0.5 rounded border-emerald-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer shrink-0"
+                />
+                <div className="text-[11px] text-emerald-950 leading-snug">
+                  <span className="font-bold text-[#056839] block">
+                    Automatically write initial task endorsement log to FDA FIS (doctrack.fda.gov.ph)
+                  </span>
+                  <span className="text-[10.5px] text-emerald-800 block mt-0.5">
+                    Format: <code className="font-mono">[Endorsement] — Remarks by: {shortCreatorAlias} ({creatorOffice} | via FROO Tracker)</code>
+                  </span>
+                </div>
+              </label>
+            )}
           </div>
 
           {/* Task Title */}
@@ -316,7 +358,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
               >
-                {CATEGORIES.map((cat) => (
+                {dynamicCategories.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -333,7 +375,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 onChange={(e) => setOrigin(e.target.value)}
                 className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#056839]"
               >
-                {ORIGINS.map((orig) => (
+                {dynamicOrigins.map((orig) => (
                   <option key={orig} value={orig}>
                     {orig}
                   </option>

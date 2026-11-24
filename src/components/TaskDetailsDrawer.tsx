@@ -31,6 +31,7 @@ import {
   Mail,
   UserPlus,
   Users,
+  Database,
 } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority, ActivityItem, FrooUserPersona, DispatchSlip, DispatchStatus } from '../types/task';
 import { UserAccount } from '../types/auth';
@@ -38,8 +39,10 @@ import { formatDate, formatDateTime } from '../utils/storage';
 import { OUTCOMES, STATUSES, FROO_OFFICES, CATEGORIES } from '../data/offices';
 import { logSystemAction, getStoredUsers } from '../utils/authStorage';
 import { doesRegionMatch, splitAssigneeNames } from '../utils/taskAuthorization';
+import { getRegionsForCluster, resolveUserClusterCode } from '../data/clusters';
 import { CreateDispatchModal } from './CreateDispatchModal';
 import { DispatchSlipPreviewModal } from './DispatchSlipPreviewModal';
+import { useSystemConfig } from '../utils/systemConfigStorage';
 import { api } from '../api/client';
 
 interface TaskDetailsDrawerProps {
@@ -67,6 +70,9 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   allStaffUsers,
   onPromptReceiveTask,
 }) => {
+  const [systemConfig] = useSystemConfig();
+  const dynamicOutcomes = systemConfig.outcomes?.length ? systemConfig.outcomes : OUTCOMES;
+
   // Dispatch state
   const [isCreateDispatchOpen, setIsCreateDispatchOpen] = useState(false);
   const [previewDispatchSlip, setPreviewDispatchSlip] = useState<DispatchSlip | null>(null);
@@ -76,11 +82,21 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [completionOutcome, setCompletionOutcome] = useState('Compliant - Passed');
   const [completionRemarks, setCompletionRemarks] = useState('');
+  const [syncCompletionToFis, setSyncCompletionToFis] = useState(true);
 
   // Activity update form state
   const [actionTitle, setActionTitle] = useState('');
   const [activityNotes, setActivityNotes] = useState('');
   const [activityStatusChange, setActivityStatusChange] = useState<string>('no-change');
+  const [syncActivityToFis, setSyncActivityToFis] = useState(true);
+
+  // On-demand single activity item push to FIS state
+  const [syncingActivityId, setSyncingActivityId] = useState<string | null>(null);
+  const [syncedActivityIds, setSyncedActivityIds] = useState<string[]>([]);
+  const [fisSyncNotice, setFisSyncNotice] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   // Edit fields mode
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -161,6 +177,37 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     ? `${currentUser.firstName} ${currentUser.lastName}`
     : currentPersona?.name || 'Authorized Officer';
   const actorOffice = currentUser?.office || currentPersona?.officeName || task.region;
+  const shortActorAlias = currentUser
+    ? `${currentUser.firstName.trim().charAt(0).toUpperCase()}. ${currentUser.lastName.trim()}`
+    : actorName;
+  const hasValid14DigitDtn = Boolean(task.dtn && /^\d{14}$/.test(task.dtn.trim()));
+
+  // Push any individual Activity History entry to FDA FIS (doctrack.fda.gov.ph)
+  const handlePushActivityItemToFis = async (item: ActivityItem) => {
+    if (!hasValid14DigitDtn || syncingActivityId) return;
+    const cleanNote = (item.notes || '').replace(/\s*•?\s*\[Logged to FDA FIS Doctrack\]/gi, '').trim();
+    const remarkText = cleanNote ? `${item.action} — ${cleanNote}` : item.action;
+
+    setSyncingActivityId(item.id);
+    setFisSyncNotice(null);
+    try {
+      const res = await api.syncTaskActivityToFis(task.id, remarkText);
+      setSyncedActivityIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+      setFisSyncNotice({
+        type: 'success',
+        message: `Written to FDA FIS (${res.mode === 'LIVE_FIS' ? 'Live FIS' : 'Local Test Mode'}): ${
+          res.finalRemarks || remarkText
+        }`,
+      });
+    } catch (err: any) {
+      setFisSyncNotice({
+        type: 'error',
+        message: err?.message || 'Could not write activity log to FDA FIS.',
+      });
+    } finally {
+      setSyncingActivityId(null);
+    }
+  };
 
   // Receive Task handler
   const handleReceiveTask = async () => {
@@ -242,16 +289,24 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   // Complete Task handler
   const handleConfirmCompletion = async (e: React.FormEvent) => {
     e.preventDefault();
+    const shouldSyncFis = hasValid14DigitDtn && syncCompletionToFis;
     try {
-      await api.completeTask(task.id, {
+      const updatedFromBackend = await api.completeTask(task.id, {
         outcome: completionOutcome,
         remarks: completionRemarks || undefined,
+        syncToFis: shouldSyncFis,
       });
+      if (updatedFromBackend) {
+        onUpdateTask(updatedFromBackend);
+        setIsCompleteModalOpen(false);
+        return;
+      }
     } catch {
       // Fallback to local state when local MySQL container is offline
     }
 
     const formattedNow = formatDateTime(new Date());
+    const baseNote = completionRemarks || 'Task concluded and marked as completed.';
 
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
@@ -259,7 +314,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       actor: actorName,
       actorOffice: actorOffice,
       date: formattedNow,
-      notes: completionRemarks || 'Task concluded and marked as completed.',
+      notes: shouldSyncFis ? `${baseNote} • [Logged to FDA FIS Doctrack]` : baseNote,
       newStatus: 'Completed',
     };
 
@@ -297,19 +352,45 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
     const isSuperOrAdmin = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
     if (newStatus === 'Open' && (task.receivedAt || task.status !== 'Open') && !isSuperOrAdmin) {
-      alert('Action restricted: Ordinary users are not authorized to revert a received task back to Open status.');
+      setFisSyncNotice({
+        type: 'error',
+        message: 'Action restricted: Ordinary users are not authorized to revert a received task back to Open status.',
+      });
       return;
     }
 
+    const shouldSyncFis = hasValid14DigitDtn && syncActivityToFis;
+
     try {
-      await api.addTaskActivity(task.id, {
+      const updatedFromBackend = await api.addTaskActivity(task.id, {
         action: actionTitle.trim(),
         notes: activityNotes.trim() || undefined,
         newStatus,
+        syncToFis: shouldSyncFis,
       });
+      if (updatedFromBackend) {
+        onUpdateTask(updatedFromBackend);
+        setActionTitle('');
+        setActivityNotes('');
+        setActivityStatusChange('no-change');
+        if (shouldSyncFis) {
+          setFisSyncNotice({
+            type: 'success',
+            message: `Activity log recorded and written to FDA FIS Doctrack for DTN ${task.dtn}.`,
+          });
+        }
+        return;
+      }
     } catch {
       // Fallback to local state when local MySQL container is offline
     }
+
+    const rawNote = activityNotes.trim();
+    const finalNote = shouldSyncFis
+      ? rawNote
+        ? `${rawNote} • [Logged to FDA FIS Doctrack]`
+        : '[Logged to FDA FIS Doctrack]'
+      : rawNote || undefined;
 
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
@@ -317,7 +398,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
       actor: actorName,
       actorOffice: actorOffice,
       date: formatDateTime(new Date()),
-      notes: activityNotes.trim() || undefined,
+      notes: finalNote,
       newStatus: newStatus,
     };
 
@@ -389,7 +470,21 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
   );
 
   const staffPool = (allStaffUsers && allStaffUsers.length > 0 ? allStaffUsers : getStoredUsers()).filter(
-    (u) => u.status === 'active'
+    (u) => {
+      if (u.status !== 'active') return false;
+      if (!currentUser || currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') {
+        return true;
+      }
+      if (currentUser.role === 'CLUSTER_DIRECTOR') {
+        const clusterRegions = getRegionsForCluster(resolveUserClusterCode(currentUser));
+        return (
+          doesRegionMatch(u.office, currentUser.office) ||
+          clusterRegions.some((r) => doesRegionMatch(u.office, r))
+        );
+      }
+      // REGIONAL_SUPERVISOR or STANDARD staff: strictly scoped to their own Regional Field Office
+      return doesRegionMatch(u.office, currentUser.office) || doesRegionMatch(task.region, u.office);
+    }
   );
 
   const isStaffAlreadyAssigned = (u: UserAccount) => {
@@ -560,10 +655,20 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
     if (currentUser.role === 'SUPERADMIN') return { canApprove: true };
 
     if (slip.status === 'Pending Regional Supervisor Approval') {
-      // Allowed: Regional Supervisor of that region, Cluster Director, Admin (ODDG-FROO), or Superadmin
-      if (currentUser.role === 'ADMIN' || currentUser.role === 'CLUSTER_DIRECTOR') return { canApprove: true };
+      // Allowed: Regional Supervisor of that region, Cluster Director of that cluster, Admin (ODDG-FROO), or Superadmin
+      if (currentUser.role === 'ADMIN') return { canApprove: true };
+      if (currentUser.role === 'CLUSTER_DIRECTOR') {
+        const clusterRegions = getRegionsForCluster(resolveUserClusterCode(currentUser));
+        if (
+          doesRegionMatch(task.region, currentUser.office) ||
+          clusterRegions.some((r) => doesRegionMatch(task.region, r))
+        ) {
+          return { canApprove: true };
+        }
+        return { canApprove: false, reason: `Requires Cluster Director or Supervisor of ${task.region}` };
+      }
       if (currentUser.role === 'REGIONAL_SUPERVISOR') {
-        if (currentUser.office.toLowerCase().includes(task.region.toLowerCase()) || task.region.toLowerCase().includes(currentUser.office.toLowerCase())) {
+        if (doesRegionMatch(task.region, currentUser.office)) {
           return { canApprove: true };
         }
         return { canApprove: false, reason: `Requires Supervisor of ${task.region}` };
@@ -1104,7 +1209,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                       onChange={(e) => setEditOutcome(e.target.value)}
                       className="w-full text-xs border border-slate-300 rounded px-2.5 py-2 sm:py-1.5 focus:border-[#056839]"
                     >
-                      {OUTCOMES.map((o) => (
+                      {dynamicOutcomes.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
                     </select>
@@ -1433,35 +1538,91 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
               </span>
             </div>
 
+            {/* FIS Doctrack Sync Feedback Banner */}
+            {fisSyncNotice && (
+              <div
+                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                  fisSyncNotice.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Database className="w-3.5 h-3.5 shrink-0 text-[#056839]" />
+                  <span className="truncate">{fisSyncNotice.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFisSyncNotice(null)}
+                  className="text-[11px] font-bold hover:underline shrink-0 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             {/* Timeline */}
             <div className="relative pl-4 space-y-4 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
               {task.activityHistory && task.activityHistory.length > 0 ? (
-                task.activityHistory.map((item) => (
-                  <div key={item.id} className="relative group">
-                    <div className="absolute -left-4 top-1.5 w-3 h-3 rounded-full bg-blue-600 ring-4 ring-white" />
-                    <div>
-                      <div className="font-medium text-slate-900 text-xs">
-                        {item.action}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                        <span>{item.actor}</span>
-                        {item.actorOffice && (
-                          <>
-                            <span>•</span>
-                            <span className="font-medium text-slate-600">{item.actorOffice}</span>
-                          </>
+                task.activityHistory.map((item) => {
+                  const isAlreadyLoggedToFis =
+                    Boolean(item.notes && item.notes.includes('[Logged to FDA FIS Doctrack]')) ||
+                    syncedActivityIds.includes(item.id);
+
+                  return (
+                    <div key={item.id} className="relative group">
+                      <div className="absolute -left-4 top-1.5 w-3 h-3 rounded-full bg-blue-600 ring-4 ring-white" />
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium text-slate-900 text-xs">
+                            {item.action}
+                          </div>
+
+                          {hasValid14DigitDtn && (
+                            <div className="shrink-0">
+                              {isAlreadyLoggedToFis ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-[#056839] border border-emerald-200">
+                                  <Check className="w-3 h-3" />
+                                  <span>Logged to FIS</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={syncingActivityId === item.id}
+                                  onClick={() => handlePushActivityItemToFis(item)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-white hover:bg-emerald-50 text-[#056839] border border-emerald-300 transition cursor-pointer disabled:opacity-50"
+                                  title={`Write this progress log to FDA FIS (DTN: ${task.dtn})`}
+                                >
+                                  <Database className="w-2.5 h-2.5" />
+                                  <span>
+                                    {syncingActivityId === item.id ? 'Writing...' : 'Write to FIS'}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                          <span>{item.actor}</span>
+                          {item.actorOffice && (
+                            <>
+                              <span>•</span>
+                              <span className="font-medium text-slate-600">{item.actorOffice}</span>
+                            </>
+                          )}
+                          <span>•</span>
+                          <span>{item.date}</span>
+                        </div>
+                        {item.notes && (
+                          <p className="mt-1 text-[11.5px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                            {item.notes}
+                          </p>
                         )}
-                        <span>•</span>
-                        <span>{item.date}</span>
                       </div>
-                      {item.notes && (
-                        <p className="mt-1 text-[11.5px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                          {item.notes}
-                        </p>
-                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-xs text-slate-400 italic">No activity recorded yet.</p>
               )}
@@ -1469,15 +1630,22 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
 
             {/* Quick Log Form */}
             <form onSubmit={handleAddActivity} className="mt-4 pt-4 border-t border-slate-200 space-y-2.5">
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
-                + Add Activity Log
-              </span>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
+                  + Add Activity Log
+                </span>
+                {hasValid14DigitDtn && (
+                  <span className="text-[10.5px] font-mono font-semibold text-[#056839] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    DTN: {task.dtn}
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 required
                 value={actionTitle}
                 onChange={(e) => setActionTitle(e.target.value)}
-                placeholder="Action taken (e.g., Sample collected, Site visit concluded)..."
+                placeholder="Action taken (e.g., Sample collected, For evaluation, Forwarded to RFO)..."
                 className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#056839]"
               />
 
@@ -1508,13 +1676,34 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                 />
               </div>
 
+              {/* Automatic FDA FIS Doctrack write option for tasks with a 14-digit DTN */}
+              {hasValid14DigitDtn && (
+                <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={syncActivityToFis}
+                    onChange={(e) => setSyncActivityToFis(e.target.checked)}
+                    className="mt-0.5 rounded border-emerald-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer shrink-0"
+                  />
+                  <div className="text-[11px] text-emerald-950 leading-snug">
+                    <span className="font-bold text-[#056839] flex items-center gap-1">
+                      <Database className="w-3 h-3 shrink-0" />
+                      <span>Automatically write this activity log to FDA FIS (doctrack.fda.gov.ph)</span>
+                    </span>
+                    <span className="block text-[10.5px] text-emerald-800 mt-0.5 font-mono">
+                      — Remarks by: {shortActorAlias} ({actorOffice} | via FROO Tracker)
+                    </span>
+                  </div>
+                </label>
+              )}
+
               <div className="flex justify-end pt-1">
                 <button
                   type="submit"
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#056839] hover:bg-[#04522d] rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Log Activity</span>
+                  <span>{hasValid14DigitDtn && syncActivityToFis ? 'Log Activity & Write to FIS' : 'Log Activity'}</span>
                 </button>
               </div>
             </form>
@@ -1892,7 +2081,7 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                   onChange={(e) => setCompletionOutcome(e.target.value)}
                   className="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:border-[#056839]"
                 >
-                  {OUTCOMES.map((o) => (
+                  {dynamicOutcomes.map((o) => (
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
@@ -1910,6 +2099,25 @@ export const TaskDetailsDrawer: React.FC<TaskDetailsDrawerProps> = ({
                   className="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:border-[#056839]"
                 />
               </div>
+
+              {hasValid14DigitDtn && (
+                <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={syncCompletionToFis}
+                    onChange={(e) => setSyncCompletionToFis(e.target.checked)}
+                    className="mt-0.5 rounded border-emerald-300 text-[#056839] focus:ring-[#056839] w-3.5 h-3.5 cursor-pointer shrink-0"
+                  />
+                  <div className="text-[11px] text-emerald-950 leading-snug">
+                    <span className="font-bold text-[#056839] block">
+                      Automatically write completion remark to FDA FIS (doctrack.fda.gov.ph)
+                    </span>
+                    <span className="text-[10.5px] text-emerald-800 block mt-0.5">
+                      Logs final outcome & remarks for DTN <strong className="font-mono">{task.dtn}</strong> into FIS Doctrack.
+                    </span>
+                  </div>
+                </label>
+              )}
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button

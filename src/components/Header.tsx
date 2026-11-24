@@ -11,8 +11,12 @@ import {
   Menu,
   X,
   ChevronRight,
+  Database,
+  ClipboardList,
+  Settings,
 } from 'lucide-react';
 import { UserAccount } from '../types/auth';
+import { WorkspaceModuleType } from '../types/doctrack';
 
 interface HeaderProps {
   onCreateTask: () => void;
@@ -30,6 +34,8 @@ interface HeaderProps {
   onSwitchUser?: (targetUser: UserAccount) => void;
   onOpenChangePassword?: () => void;
   dbStatus?: 'connecting' | 'online' | 'offline';
+  activeWorkspaceModule?: WorkspaceModuleType;
+  onSelectWorkspaceModule?: (module: WorkspaceModuleType) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,10 +52,14 @@ export const Header: React.FC<HeaderProps> = ({
   allStaffUsers = [],
   onOpenChangePassword,
   dbStatus = 'offline',
+  activeWorkspaceModule = 'TASKS',
+  onSelectWorkspaceModule,
+  allowedRegions = [],
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isAdminOrSuper = currentUser?.role === 'SUPERADMIN' || currentUser?.role === 'ADMIN';
+  const isClusterDirector = currentUser?.role === 'CLUSTER_DIRECTOR';
   const pendingUsersCount = allStaffUsers.filter((u) => u.status === 'pending').length;
 
   useEffect(() => {
@@ -298,13 +308,38 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     All Regions/Offices
                   </button>
-                ) : null}
-
-                {currentUser && currentUser.office !== 'ODDG-FROO' && (
+                ) : isClusterDirector ? (
+                  <>
+                    <button
+                      onClick={() => onSelectRegionFilter('All')}
+                      className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 cursor-pointer ${
+                        selectedRegionFilter === 'All'
+                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <Building2 className="w-3 h-3 text-[#056839]" />
+                      <span>All Cluster RFOs ({allowedRegions.length})</span>
+                    </button>
+                    {allowedRegions.map((reg) => (
+                      <button
+                        key={reg}
+                        onClick={() => onSelectRegionFilter(reg)}
+                        className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
+                          selectedRegionFilter === reg
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {reg}
+                      </button>
+                    ))}
+                  </>
+                ) : currentUser && currentUser.office !== 'ODDG-FROO' ? (
                   <button
-                    onClick={() => onSelectRegionFilter(currentUser.office)}
+                    onClick={() => onSelectRegionFilter('All')}
                     className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 cursor-pointer ${
-                      selectedRegionFilter === currentUser.office
+                      selectedRegionFilter === 'All' || selectedRegionFilter === currentUser.office
                         ? 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                     }`}
@@ -312,11 +347,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <Building2 className="w-3 h-3 text-[#056839]" />
                     <span>My Jurisdiction: {currentUser.office}</span>
                   </button>
-                )}
-
-                {scopeLabel && (
-                  <span className="text-[11px] text-slate-500 ml-1">({scopeLabel})</span>
-                )}
+                ) : null}
               </div>
 
               <div className="text-slate-400 text-xs hidden sm:block">
@@ -421,20 +452,60 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                     )}
 
-                    {currentUser && currentUser.office !== 'ODDG-FROO' && (
+                    {isClusterDirector && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => runMobileMenuAction(() => onSelectRegionFilter('All'))}
+                          className={`w-full min-h-[44px] px-3.5 py-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer border ${
+                            selectedRegionFilter === 'All'
+                              ? 'bg-emerald-50 text-[#056839] border-emerald-200'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="truncate">All Cluster RFOs ({allowedRegions.join(', ')})</span>
+                          {selectedRegionFilter === 'All' && (
+                            <span className="text-[10px] font-bold uppercase text-[#056839] shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </button>
+                        {allowedRegions.map((reg) => (
+                          <button
+                            key={reg}
+                            type="button"
+                            onClick={() => runMobileMenuAction(() => onSelectRegionFilter(reg))}
+                            className={`w-full min-h-[40px] px-3.5 py-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer border ${
+                              selectedRegionFilter === reg
+                                ? 'bg-emerald-50 text-[#056839] border-emerald-200'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span>{reg}</span>
+                            {selectedRegionFilter === reg && (
+                              <span className="text-[10px] font-bold uppercase text-[#056839] shrink-0">
+                                Active
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {!isClusterDirector && currentUser && currentUser.office !== 'ODDG-FROO' && (
                       <button
                         type="button"
                         onClick={() =>
-                          runMobileMenuAction(() => onSelectRegionFilter(currentUser.office))
+                          runMobileMenuAction(() => onSelectRegionFilter('All'))
                         }
                         className={`w-full min-h-[44px] px-3.5 py-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer border ${
-                          selectedRegionFilter === currentUser.office
+                          selectedRegionFilter === 'All' || selectedRegionFilter === currentUser.office
                             ? 'bg-emerald-50 text-[#056839] border-emerald-200'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
                         <span className="truncate">My Office: {currentUser.office}</span>
-                        {selectedRegionFilter === currentUser.office && (
+                        {(selectedRegionFilter === 'All' || selectedRegionFilter === currentUser.office) && (
                           <span className="text-[10px] font-bold uppercase text-[#056839] shrink-0">
                             Active
                           </span>
@@ -442,6 +513,88 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Workspace Modules Switcher */}
+              {onSelectWorkspaceModule && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                    Workspace Modules
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => runMobileMenuAction(() => onSelectWorkspaceModule('TASKS'))}
+                    className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold transition cursor-pointer ${
+                      activeWorkspaceModule === 'TASKS'
+                        ? 'bg-[#056839] text-white border-[#056839] shadow-2xs'
+                        : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <ClipboardList
+                        className={`w-4 h-4 ${
+                          activeWorkspaceModule === 'TASKS' ? 'text-emerald-200' : 'text-[#056839]'
+                        }`}
+                      />
+                      <span>FROO Task Tracker</span>
+                    </span>
+                    <ChevronRight
+                      className={`w-4 h-4 ${
+                        activeWorkspaceModule === 'TASKS' ? 'text-emerald-200' : 'text-slate-400'
+                      }`}
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => runMobileMenuAction(() => onSelectWorkspaceModule('FIS_DOCTRACK'))}
+                    className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold transition cursor-pointer ${
+                      activeWorkspaceModule === 'FIS_DOCTRACK'
+                        ? 'bg-[#056839] text-white border-[#056839] shadow-2xs'
+                        : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Database
+                        className={`w-4 h-4 ${
+                          activeWorkspaceModule === 'FIS_DOCTRACK' ? 'text-emerald-200' : 'text-[#056839]'
+                        }`}
+                      />
+                      <span>DTN Integration</span>
+                    </span>
+                    <ChevronRight
+                      className={`w-4 h-4 ${
+                        activeWorkspaceModule === 'FIS_DOCTRACK' ? 'text-emerald-200' : 'text-slate-400'
+                      }`}
+                    />
+                  </button>
+
+                  {currentUser?.role === 'SUPERADMIN' && (
+                    <button
+                      type="button"
+                      onClick={() => runMobileMenuAction(() => onSelectWorkspaceModule('SYSTEM_CONFIG'))}
+                      className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold transition cursor-pointer ${
+                        activeWorkspaceModule === 'SYSTEM_CONFIG'
+                          ? 'bg-[#056839] text-white border-[#056839] shadow-2xs'
+                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Settings
+                          className={`w-4 h-4 ${
+                            activeWorkspaceModule === 'SYSTEM_CONFIG' ? 'text-emerald-200' : 'text-[#056839]'
+                          }`}
+                        />
+                        <span>System Configuration</span>
+                      </span>
+                      <ChevronRight
+                        className={`w-4 h-4 ${
+                          activeWorkspaceModule === 'SYSTEM_CONFIG' ? 'text-emerald-200' : 'text-slate-400'
+                        }`}
+                      />
+                    </button>
+                  )}
                 </div>
               )}
 

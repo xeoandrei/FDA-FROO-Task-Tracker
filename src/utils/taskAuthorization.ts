@@ -1,6 +1,6 @@
 import { Task } from '../types/task';
 import { UserAccount } from '../types/auth';
-import { getRegionsForCluster } from '../data/clusters';
+import { FROO_CLUSTERS, getRegionsForCluster, resolveUserClusterCode } from '../data/clusters';
 import { FROO_OFFICES } from '../data/offices';
 
 /**
@@ -31,29 +31,55 @@ function expandRegionTokens(raw: string): string[] {
     tokens.add('caraga');
     tokens.add('region 13 (caraga)');
   }
+  // Match "RFO 1", "RFO-1", "Region 1", "Regional Field Office - Ilocos Region (Region 1)", etc. with strict word boundary so Region 1 never matches Region 10/11/12/13
+  const rfoMatch = val.match(/(?:^|\b)(?:rfo|region)[\s-]*([0-9]+[ab]?|car|ncr)\b/i);
+  if (rfoMatch) {
+    const regKey = rfoMatch[1].toLowerCase();
+    tokens.add(`region ${regKey}`);
+    tokens.add(`rfo ${regKey}`);
+    if (regKey === 'car' || regKey === 'ncr') {
+      tokens.add(regKey);
+    }
+    if (regKey === '12') {
+      tokens.add('region 12 / barmm');
+    }
+    if (regKey === '13') {
+      tokens.add('region 13 (caraga)');
+    }
+  }
+
   if (val === 'nlc' || val.includes('north luzon')) {
     tokens.add('nlc');
     tokens.add('north luzon cluster (nlc)');
+    FROO_CLUSTERS.NLC.regions.forEach((r) => tokens.add(r.toLowerCase()));
   }
   if (val === 'slc' || val.includes('south luzon')) {
     tokens.add('slc');
     tokens.add('south luzon cluster (slc)');
+    FROO_CLUSTERS.SLC.regions.forEach((r) => tokens.add(r.toLowerCase()));
   }
   if (val === 'vbc' || val === 'vc' || val.includes('visayas')) {
     tokens.add('vbc');
     tokens.add('vc');
     tokens.add('visayas cluster (vc)');
+    FROO_CLUSTERS.VC.regions.forEach((r) => tokens.add(r.toLowerCase()));
   }
-  if (val === 'moc' || val.includes('mindanao')) {
-    tokens.add('moc');
-    tokens.add('mindanao cluster (moc)');
+  if (val === 'mec' || val.includes('mindanao east')) {
+    tokens.add('mec');
+    tokens.add('mindanao east cluster (mec)');
+    FROO_CLUSTERS.MEC.regions.forEach((r) => tokens.add(r.toLowerCase()));
+  }
+  if (val === 'mwc' || val.includes('mindanao west')) {
+    tokens.add('mwc');
+    tokens.add('mindanao west cluster (mwc)');
+    FROO_CLUSTERS.MWC.regions.forEach((r) => tokens.add(r.toLowerCase()));
   }
 
   for (const office of FROO_OFFICES) {
     const codeL = office.code.toLowerCase();
     const nameL = office.name.toLowerCase();
     const shortL = office.shortLabel.toLowerCase();
-    if (val === codeL || val === nameL || val === shortL) {
+    if (tokens.has(codeL) || tokens.has(nameL) || tokens.has(shortL)) {
       tokens.add(codeL);
       tokens.add(nameL);
       tokens.add(shortL);
@@ -206,7 +232,7 @@ export function isTaskRequiringUserAction(task: Task, user: UserAccount | null):
       return true;
     }
     if (user.role === 'CLUSTER_DIRECTOR') {
-      const clusterRegions = getRegionsForCluster(user.cluster || 'NLC');
+      const clusterRegions = getRegionsForCluster(resolveUserClusterCode(user));
       if (clusterRegions.some((r) => doesRegionMatch(task.region, r))) {
         return true;
       }
@@ -224,7 +250,7 @@ export function isTaskRequiringUserAction(task: Task, user: UserAccount | null):
         return true;
       }
       if (user.role === 'CLUSTER_DIRECTOR') {
-        const clusterRegions = getRegionsForCluster(user.cluster || 'NLC');
+        const clusterRegions = getRegionsForCluster(resolveUserClusterCode(user));
         if (clusterRegions.some((r) => doesRegionMatch(task.region, r))) {
           return true;
         }
@@ -275,7 +301,7 @@ export function validateCanReceiveTask(
 
   // Cluster Director can receive tasks in their cluster
   if (user.role === 'CLUSTER_DIRECTOR') {
-    const clusterRegions = getRegionsForCluster(user.cluster || 'NLC');
+    const clusterRegions = getRegionsForCluster(resolveUserClusterCode(user));
     const isRegionMatch =
       doesRegionMatch(task.region, user.office) ||
       clusterRegions.some((r) => doesRegionMatch(task.region, r));

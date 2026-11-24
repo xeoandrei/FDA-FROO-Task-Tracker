@@ -32,6 +32,7 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
   const [logs, setLogs] = useState<SystemLog[]>(() => getSystemLogs());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAction, setSelectedAction] = useState<string>('All');
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -53,24 +54,11 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleRefresh = async () => {
-    try {
-      const remoteLogs = await api.getSystemLogs();
-      setLogs(remoteLogs);
-    } catch {
-      setLogs(getSystemLogs());
-    }
-  };
-
   const handleClearLogs = () => {
-    if (currentUser.role !== 'SUPERADMIN') {
-      alert('Only the Superadmin can clear system audit logs.');
-      return;
-    }
-    if (confirm('Are you sure you want to purge all system audit trail logs? This action is irreversible.')) {
-      clearSystemLogs();
-      setLogs([]);
-    }
+    if (currentUser.role !== 'SUPERADMIN') return;
+    clearSystemLogs();
+    setLogs([]);
+    setIsConfirmingClear(false);
   };
 
   const handleExportCsv = () => {
@@ -131,10 +119,17 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
         return 'bg-red-50 text-red-700 border-red-200';
       case 'USER_REGISTERED':
       case 'USER_STATUS_CHANGED':
+      case 'USER_APPROVED':
+      case 'USER_UPDATED':
+      case 'SYSTEM_CONFIG_UPDATED':
         return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'SESSION_TIMEOUT':
       case 'SESSION_REPLACED':
         return 'bg-amber-50 text-amber-800 border-amber-300';
+      case 'DOCTRACK_BULK_UPLOAD':
+        return 'bg-teal-50 text-teal-800 border-teal-200';
+      case 'DOCTRACK_DTN_SEARCH':
+        return 'bg-cyan-50 text-cyan-800 border-cyan-200';
       default:
         return 'bg-slate-50 text-slate-700 border-slate-200';
     }
@@ -175,14 +170,34 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
             </button>
 
             {currentUser.role === 'SUPERADMIN' && (
-              <button
-                onClick={handleClearLogs}
-                className="px-2.5 md:px-3 py-2 md:py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                title="Clear Audit"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Clear Audit</span>
-              </button>
+              isConfirmingClear ? (
+                <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 px-2 py-1 rounded-lg">
+                  <span className="text-[11px] font-semibold text-rose-800">Purge local logs?</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingClear(false)}
+                    className="px-2 py-0.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 rounded cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearLogs}
+                    className="px-2 py-0.5 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsConfirmingClear(true)}
+                  className="px-2.5 md:px-3 py-2 md:py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Clear Audit"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Clear Audit</span>
+                </button>
+              )
             )}
 
             <button
@@ -226,12 +241,17 @@ export const SystemLogsModal: React.FC<SystemLogsModalProps> = ({
               <option value="DISPATCH_CREATED">Dispatch Created</option>
               <option value="DISPATCH_APPROVED">Dispatch Approved</option>
               <option value="DISPATCH_REJECTED">Dispatch Rejected</option>
+              <option value="DOCTRACK_BULK_UPLOAD">FIS Doctrack Bulk Upload</option>
+              <option value="DOCTRACK_DTN_SEARCH">FIS Doctrack DTN Search</option>
               <option value="USER_LOGIN">User Login</option>
               <option value="USER_LOGOUT">User Logout</option>
               <option value="SESSION_TIMEOUT">Session Idle Timeout</option>
               <option value="SESSION_REPLACED">Concurrent Session Replaced</option>
               <option value="USER_REGISTERED">User Registered</option>
+              <option value="USER_APPROVED">User Approved</option>
+              <option value="USER_UPDATED">User / Password Updated</option>
               <option value="USER_STATUS_CHANGED">User Status Changed</option>
+              <option value="SYSTEM_CONFIG_UPDATED">System Configuration Updated</option>
             </select>
 
             <span className="text-xs text-slate-400 sm:ml-1 shrink-0">

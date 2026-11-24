@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -31,6 +31,7 @@ import {
   logSystemAction,
   SUPERADMIN_EMAIL,
 } from '../utils/authStorage';
+import { useSystemConfig, saveStoredSystemConfig } from '../utils/systemConfigStorage';
 import { api, getSessionLogoutReason, setSessionLogoutReason } from '../api/client';
 
 interface LandingPageProps {
@@ -38,6 +39,27 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
+  const [systemConfig] = useSystemConfig();
+  const dynamicOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
+  const selfRegistrationPositions = (systemConfig.positions || []).filter(
+    (p) => p.selfRegisterAllowed
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    api
+      .getSystemConfig()
+      .then((remoteCfg) => {
+        if (isMounted && remoteCfg) {
+          saveStoredSystemConfig(remoteCfg);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const [sessionNotice, setSessionNotice] = useState<string | null>(() => getSessionLogoutReason());
   const [activeModal, setActiveModal] = useState<'none' | 'login' | 'register'>(() =>
     getSessionLogoutReason() ? 'login' : 'none'
@@ -540,11 +562,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                   onChange={(e) => setRegPosition(e.target.value as UserPosition)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
                 >
-                  <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO - Field Inspector)</option>
-                  <option value="Licensing Officer">Licensing Officer</option>
-                  <option value="Information Officer">Information Officer</option>
-                  <option value="Administrative">Administrative</option>
-                  <option value="Regional Supervisor">Regional Supervisor</option>
+                  {selfRegistrationPositions.map((pos) => (
+                    <option key={pos.title} value={pos.title}>
+                      {pos.title}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -556,7 +578,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => {
                   onChange={(e) => setRegOffice(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#056839]"
                 >
-                  {FROO_OFFICES.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
+                  {dynamicOffices.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
                     <option key={o.id} value={o.name}>
                       {o.name}
                     </option>

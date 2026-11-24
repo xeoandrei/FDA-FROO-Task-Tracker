@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, CheckCircle2, AlertTriangle, ShieldCheck, UserCheck, Calendar, MapPin, Hash } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, CheckCircle2, AlertTriangle, ShieldCheck, Database } from 'lucide-react';
 import { Task } from '../types/task';
 import { UserAccount } from '../types/auth';
 import { validateCanReceiveTask } from '../utils/taskAuthorization';
@@ -10,7 +10,7 @@ interface ReceiveTaskModalProps {
   onClose: () => void;
   task: Task | null;
   currentUser: UserAccount | null;
-  onConfirmAccept: (task: Task) => void;
+  onConfirmAccept: (task: Task, syncToFis?: boolean) => void;
 }
 
 export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
@@ -20,8 +20,11 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
   currentUser,
   onConfirmAccept,
 }) => {
+  const [syncToFis, setSyncToFis] = useState(true);
+
   if (!isOpen || !task) return null;
 
+  const hasValid14DigitDtn = Boolean(task.dtn && /^\d{14}$/.test(task.dtn.trim()));
   const validation = validateCanReceiveTask(task, currentUser);
   const nowFormatted = new Date().toLocaleString('en-US', {
     month: 'short',
@@ -33,7 +36,7 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
 
   const handleConfirm = () => {
     if (!validation.allowed) return;
-    onConfirmAccept(task);
+    onConfirmAccept(task, hasValid14DigitDtn && syncToFis);
   };
 
   return (
@@ -121,6 +124,27 @@ export const ReceiveTaskModal: React.FC<ReceiveTaskModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Automatic FIS Doctrack Logging Option for 14-digit DTN tasks */}
+          {hasValid14DigitDtn && (
+            <label className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50/90 border border-emerald-200 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={syncToFis}
+                onChange={(e) => setSyncToFis(e.target.checked)}
+                className="mt-0.5 rounded border-emerald-300 text-[#056839] focus:ring-[#056839] w-4 h-4 cursor-pointer shrink-0"
+              />
+              <div className="text-[11.5px] text-emerald-950 leading-snug">
+                <span className="font-bold flex items-center gap-1.5 text-[#056839]">
+                  <Database className="w-3.5 h-3.5 shrink-0" />
+                  <span>Automatically write receipt log to FDA FIS (doctrack.fda.gov.ph)</span>
+                </span>
+                <span className="block text-[11px] text-emerald-800 mt-0.5">
+                  Inserts official receipt remark for DTN <strong className="font-mono">{task.dtn}</strong> into FIS Doctrack.
+                </span>
+              </div>
+            </label>
+          )}
 
           {/* Recipient Audit Preview */}
           {currentUser && (

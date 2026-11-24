@@ -10,6 +10,7 @@ import taskRoutes from './server/routes/taskRoutes';
 import dispatchRoutes from './server/routes/dispatchRoutes';
 import systemLogRoutes from './server/routes/systemLogRoutes';
 import referenceRoutes from './server/routes/referenceRoutes';
+import doctrackRoutes from './server/routes/doctrackRoutes';
 import { checkDatabaseConnection, pool } from './server/db';
 import { runAutoSeed } from './server/seed';
 
@@ -35,7 +36,7 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json());
+  app.use(express.json({ limit: '15mb' }));
 
   // Mount API Routes
   app.use('/api/auth', authRoutes);
@@ -44,6 +45,7 @@ async function startServer() {
   app.use('/api', dispatchRoutes);
   app.use('/api/system-logs', systemLogRoutes);
   app.use('/api/references', referenceRoutes);
+  app.use('/api/doctrack', doctrackRoutes);
 
   // Health and connection status endpoint
   app.get('/api/health', async (_req, res) => {

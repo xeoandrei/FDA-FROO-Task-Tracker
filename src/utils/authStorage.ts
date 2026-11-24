@@ -1,6 +1,7 @@
 import { UserAccount, UserRole, UserPosition, SystemLog, SystemActionType, ClusterCode } from '../types/auth';
 import { INITIAL_USERS } from '../data/initialUsers';
 import { FROO_CLUSTERS, getClusterForRegion } from '../data/clusters';
+import { getStoredSystemConfig } from './systemConfigStorage';
 
 const USERS_STORAGE_KEY = 'froo_user_accounts_v3';
 const CURRENT_USER_KEY = 'froo_current_user_session_v2';
@@ -15,7 +16,7 @@ export function isValidFdaEmail(email: string): boolean {
   return /^[a-zA-Z0-9._%+-]+@fda\.gov\.ph$/.test(trimmed);
 }
 
-// Automatic RBAC determination logic based on user specifications
+// Automatic RBAC determination logic based on user specifications & Superadmin dynamic position mappings
 export function determineRole(email: string, office: string, position: UserPosition): UserRole {
   const normEmail = email.trim().toLowerCase();
   if (normEmail === SUPERADMIN_EMAIL) {
@@ -30,6 +31,13 @@ export function determineRole(email: string, office: string, position: UserPosit
   }
   if (position === 'Regional Supervisor') {
     return 'REGIONAL_SUPERVISOR';
+  }
+  const sysConfig = getStoredSystemConfig();
+  const matchedPos = sysConfig.positions.find(
+    (p) => p.title.toLowerCase() === String(position || '').trim().toLowerCase()
+  );
+  if (matchedPos && matchedPos.defaultRole) {
+    return matchedPos.defaultRole;
   }
   return 'STANDARD';
 }

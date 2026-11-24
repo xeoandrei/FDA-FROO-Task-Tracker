@@ -367,5 +367,63 @@ router.post('/:id/force-logout', authenticateToken, requireRoles('SUPERADMIN', '
   }
 });
 
+// PATCH /api/users/:id/password - Superadmin resets/changes a user's password
+router.patch('/:id/password', authenticateToken, requireRoles('SUPERADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    const [rows]: [any[], any] = await pool.query(
+      'SELECT id, email, first_name, last_name FROM users WHERE id = ?',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    const targetUser = rows[0];
+    const passwordHash = await hashPassword(newPassword.trim());
+
+    await pool.query(
+      `UPDATE users SET password_hash = ?, active_session_id = 'FORCED_LOGOUT', last_activity = ? WHERE id = ?`,
+      [passwordHash, 'Password reset by Superadmin', id]
+    );
+
+    if (req.user) {
+      try {
+        await pool.query(
+          `INSERT INTO system_audit_logs (event_type, user_id, user_email, user_role, description, target_entity_id, target_entity_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            'USER_UPDATED',
+            req.user.id,
+            req.user.email,
+            req.user.role,
+            `Superadmin ${req.user.firstName} ${req.user.lastName} changed account password for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}).`,
+            id,
+            `${targetUser.first_name} ${targetUser.last_name}`,
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('Audit log write warning on superadmin password reset:', auditErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      id,
+      message: `Password for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}) has been updated.`,
+    });
+  } catch (error) {
+    console.error('Superadmin reset password error:', error);
+    res.status(500).json({ error: 'Failed to update user password' });
+  }
+});
+
 export default router;
 

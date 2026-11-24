@@ -6,6 +6,7 @@ import {
   sendTaskReceivedNotification,
   sendTaskReminderNotification,
 } from '../services/emailService';
+import { writeSingleTaskActivityToFis } from '../fisDb';
 
 const router = Router();
 
@@ -248,6 +249,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       priority,
       dtn,
       isManualCreate,
+      syncToFis,
     } = req.body;
 
     // Block legacy background localStorage sync from re-creating deleted tasks or overwriting createdBy
@@ -369,6 +371,26 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       ]
     );
 
+    let initialActivityNotes = `Task assigned to ${assignedNamesString || 'Staff'}. DTN: ${finalDtn}`;
+
+    // Automatically write initial task assignment log to FDA FIS if syncToFis is enabled and DTN is 14 digits
+    if (syncToFis !== false && /^[0-9]{14}$/.test(finalDtn)) {
+      try {
+        const fisRes = await writeSingleTaskActivityToFis({
+          dtn: finalDtn,
+          rawRemark: `Endorsed / assigned to ${assignedNamesString || resolvedRegion} (${resolvedRegion}) for ${category}: ${taskTitle.trim()}`,
+          firstName: req.user?.firstName,
+          lastName: req.user?.lastName,
+          officeCode: actorOffice,
+        });
+        if (fisRes.synced) {
+          initialActivityNotes += ` • [Logged to FDA FIS Doctrack]`;
+        }
+      } catch (fisErr) {
+        console.warn('Notice: Could not write initial task log to FIS:', fisErr);
+      }
+    }
+
     // Initial activity log
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
@@ -379,7 +401,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         actorName,
         actorOffice,
         actorId,
-        `Task assigned to ${assignedNamesString || 'Staff'}. DTN: ${finalDtn}`,
+        initialActivityNotes,
       ]
     );
 
@@ -442,22 +464,51 @@ async function resolveValidUserId(connection: any, candidateId?: string | null):
   return rows.length > 0 ? rows[0].id : null;
 }
 
-// Helper to match comma-separated task regions with user office
+// Helper to match comma-separated task regions with user office using strict word boundaries (Region 1 never matches Region 10..13)
 function doesTaskRegionMatchOffice(taskRegionRaw: string, userOfficeRaw: string): boolean {
-  const normalize = (val: string) => {
-    const v = val.toLowerCase().trim();
-    if (v === 'region ncr' || v === 'ncr' || v.includes('field office - ncr')) return 'ncr';
-    if (v === 'region car' || v === 'car' || v.includes('cordillera')) return 'car';
-    if (v === 'region 12 / barmm' || v === 'region 12' || v === 'barmm') return 'region 12 / barmm';
-    if (v === 'region 13' || v === 'caraga' || v.includes('caraga')) return 'region 13';
-    return v;
+  const extractTokens = (raw: string): string[] => {
+    const v = raw.toLowerCase().trim();
+    if (!v) return [];
+    const tokens = new Set<string>([v]);
+    if (v === 'region ncr' || v === 'ncr' || v.includes('field office - ncr')) {
+      tokens.add('ncr');
+      tokens.add('region ncr');
+    }
+    if (v === 'region car' || v === 'car' || v.includes('cordillera')) {
+      tokens.add('car');
+      tokens.add('region car');
+    }
+    if (v === 'region 12 / barmm' || v === 'region 12' || v === 'barmm' || v.includes('soccksargen')) {
+      tokens.add('region 12');
+      tokens.add('barmm');
+      tokens.add('region 12 / barmm');
+    }
+    if (v === 'region 13' || v === 'caraga' || v.includes('caraga')) {
+      tokens.add('region 13');
+      tokens.add('caraga');
+      tokens.add('region 13 (caraga)');
+    }
+    const rfoMatch = v.match(/(?:^|\b)(?:rfo|region)[\s-]*([0-9]+[ab]?|car|ncr)\b/i);
+    if (rfoMatch) {
+      const regKey = rfoMatch[1].toLowerCase();
+      tokens.add(`region ${regKey}`);
+      tokens.add(`rfo ${regKey}`);
+    }
+    return Array.from(tokens);
   };
-  const userNorm = normalize(userOfficeRaw || '');
+
+  const userTokens = extractTokens(userOfficeRaw || '');
+  if (userTokens.length === 0) return false;
+
   const parts = (taskRegionRaw || '')
     .split(',')
-    .map((p) => normalize(p))
+    .map((p) => p.trim())
     .filter(Boolean);
-  return parts.some((p) => p === userNorm || p.includes(userNorm) || userNorm.includes(p));
+
+  return parts.some((part) => {
+    const partTokens = extractTokens(part);
+    return partTokens.some((pt) => userTokens.includes(pt));
+  });
 }
 
 // POST /api/tasks/:id/receive - Receive and Accept Task
@@ -522,6 +573,7 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
     const actorName = `${user.firstName} ${user.lastName}`;
     const actorOffice = user.office;
     const validActorId = await resolveValidUserId(connection, user.id);
+    const { syncToFis = true } = req.body || {};
 
     // Update task
     await connection.query(
@@ -533,6 +585,24 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
       [validActorId, id]
     );
 
+    let receiptNotes = `Official receipt recorded by ${actorName} (${user.role}, ${actorOffice}). Task execution initiated.`;
+    if (syncToFis !== false && task.dtn && /^[0-9]{14}$/.test(String(task.dtn).trim())) {
+      try {
+        const fisRes = await writeSingleTaskActivityToFis({
+          dtn: String(task.dtn).trim(),
+          rawRemark: `Document / task received and accepted for execution by ${actorName} (${actorOffice})`,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          officeCode: actorOffice,
+        });
+        if (fisRes.synced) {
+          receiptNotes += ` • [Logged to FDA FIS Doctrack]`;
+        }
+      } catch (fisErr) {
+        console.warn('Notice: Could not write task receipt log to FIS:', fisErr);
+      }
+    }
+
     // Record activity log
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
@@ -543,7 +613,7 @@ router.post('/:id/receive', authenticateToken, async (req: AuthenticatedRequest,
         actorName,
         actorOffice,
         validActorId,
-        `Official receipt recorded by ${actorName} (${user.role}, ${actorOffice}). Task execution initiated.`,
+        receiptNotes,
       ]
     );
 
@@ -600,7 +670,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
   const connection = await pool.getConnection();
   try {
     const { id } = req.params;
-    const { outcome, remarks } = req.body;
+    const { outcome, remarks, syncToFis = true } = req.body;
     const user = req.user;
 
     if (!user) {
@@ -630,6 +700,27 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
       [outcome || 'Compliance Verified', remarks || null, validActorId, id]
     );
 
+    let completionNotes = remarks || 'Task marked completed by operational officer.';
+    if (syncToFis !== false && task.dtn && /^[0-9]{14}$/.test(String(task.dtn).trim())) {
+      try {
+        const fisRaw = remarks
+          ? `Task Completed (${outcome || 'Compliance Verified'}): ${remarks}`
+          : `Task Completed — Outcome: ${outcome || 'Compliance Verified'}`;
+        const fisRes = await writeSingleTaskActivityToFis({
+          dtn: String(task.dtn).trim(),
+          rawRemark: fisRaw,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          officeCode: user.office,
+        });
+        if (fisRes.synced) {
+          completionNotes += ` • [Logged to FDA FIS Doctrack]`;
+        }
+      } catch (fisErr) {
+        console.warn('Notice: Could not write task completion log to FIS:', fisErr);
+      }
+    }
+
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
        VALUES (?, ?, ?, ?, ?, ?, 'Completed')`,
@@ -639,7 +730,7 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
         actorName,
         user.office,
         validActorId,
-        remarks || 'Task marked completed by operational officer.',
+        completionNotes,
       ]
     );
 
@@ -670,12 +761,12 @@ router.post('/:id/complete', authenticateToken, async (req: AuthenticatedRequest
   }
 });
 
-// POST /api/tasks/:id/activity - Add progress update / activity log
+// POST /api/tasks/:id/activity - Add progress update / activity log (with optional automatic write to FDA FIS)
 router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const connection = await pool.getConnection();
   try {
     const { id } = req.params;
-    const { notes, newStatus, action } = req.body;
+    const { notes, newStatus, action, syncToFis = false } = req.body;
     const user = req.user;
 
     if (!user) {
@@ -710,6 +801,29 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
       await connection.query('UPDATE tasks SET status = ? WHERE id = ?', [newStatus, id]);
     }
 
+    let finalNotes = notes ? String(notes).trim() : '';
+    if (syncToFis && task.dtn && /^[0-9]{14}$/.test(String(task.dtn).trim())) {
+      try {
+        const combinedRemark = finalNotes
+          ? `${action || 'Task Progress Update'} — ${finalNotes}`
+          : String(action || 'Task Progress Update').trim();
+        const fisRes = await writeSingleTaskActivityToFis({
+          dtn: String(task.dtn).trim(),
+          rawRemark: combinedRemark,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          officeCode: user.office,
+        });
+        if (fisRes.synced) {
+          finalNotes = finalNotes
+            ? `${finalNotes} • [Logged to FDA FIS Doctrack]`
+            : `[Logged to FDA FIS Doctrack]`;
+        }
+      } catch (fisErr) {
+        console.warn('Notice: Could not write task activity to FIS:', fisErr);
+      }
+    }
+
     await connection.query(
       `INSERT INTO task_activity_logs (task_id, action, actor_name, actor_office, actor_user_id, notes, new_status)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -719,7 +833,7 @@ router.post('/:id/activity', authenticateToken, async (req: AuthenticatedRequest
         actorName,
         user.office,
         validActorId,
-        notes || '',
+        finalNotes,
         newStatus || task.status,
       ]
     );
@@ -988,4 +1102,62 @@ router.post('/:id/remind', authenticateToken, async (req: AuthenticatedRequest, 
   }
 });
 
+// POST /api/tasks/:id/sync-fis-activity - Push a specific task progress/activity log to FDA FIS (doctrack.fda.gov.ph)
+router.post('/:id/sync-fis-activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { remarkText } = req.body || {};
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Active session required' });
+    }
+
+    const [rows]: [any[], any] = await pool.query('SELECT * FROM tasks WHERE id = ? LIMIT 1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const task = rows[0];
+    const cleanDtn = String(task.dtn || '').trim();
+    if (!/^[0-9]{14}$/.test(cleanDtn)) {
+      return res.status(400).json({
+        error: 'This task does not have a valid 14-digit numeric DTN.',
+      });
+    }
+
+    const cleanRemark = String(remarkText || '').trim();
+    if (!cleanRemark) {
+      return res.status(400).json({
+        error: 'Remark text is required to write to FDA FIS.',
+      });
+    }
+
+    const fisRes = await writeSingleTaskActivityToFis({
+      dtn: cleanDtn,
+      rawRemark: cleanRemark,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      officeCode: user.office,
+    });
+
+    if (!fisRes.synced) {
+      return res.status(400).json({
+        error: fisRes.reason || 'Could not resolve DTN in FDA FIS.',
+      });
+    }
+
+    res.json({
+      success: true,
+      mode: fisRes.mode,
+      docrecID: fisRes.docrecID,
+      finalRemarks: fisRes.finalRemarks,
+    });
+  } catch (error: any) {
+    console.error('Sync task activity to FIS error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to sync task activity to FDA FIS.' });
+  }
+});
+
 export default router;
+

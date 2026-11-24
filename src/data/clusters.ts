@@ -36,12 +36,56 @@ export const FROO_CLUSTERS: Record<ClusterCode, ClusterInfo> = {
 export const CLUSTERS_LIST: ClusterInfo[] = Object.values(FROO_CLUSTERS);
 
 export function getClusterForRegion(regionCode: string): ClusterInfo | undefined {
-  const norm = regionCode.trim().toLowerCase();
+  const norm = (regionCode || '').trim().toLowerCase();
+  if (!norm) return undefined;
+
+  // Normalize "RFO 1" -> "region 1", "CAR" -> "region car", "NCR" -> "region ncr", "Region 13 (Caraga)" -> "region 13"
+  const rfoMatch = norm.match(/^(?:rfo|region)[\s-]*([0-9]+[ab]?|car|ncr)\b/i);
+  const canonical =
+    norm === 'car' || norm.includes('cordillera')
+      ? 'region car'
+      : norm === 'ncr' || norm.includes('field office - ncr')
+      ? 'region ncr'
+      : norm.includes('region 12') || norm.includes('barmm') || norm.includes('soccksargen')
+      ? 'region 12 / barmm'
+      : norm.includes('region 13') || norm.includes('caraga')
+      ? 'region 13'
+      : rfoMatch
+      ? `region ${rfoMatch[1].toLowerCase()}`
+      : norm;
+
   return CLUSTERS_LIST.find((c) =>
-    c.regions.some((r) => r.toLowerCase() === norm || norm.includes(r.toLowerCase()))
+    c.regions.some((r) => r.toLowerCase() === canonical || r.toLowerCase() === norm)
   );
 }
 
 export function getRegionsForCluster(clusterCode: ClusterCode): string[] {
   return FROO_CLUSTERS[clusterCode]?.regions || [];
 }
+
+export function resolveUserClusterCode(user: {
+  cluster?: ClusterCode | string | null;
+  office?: string | null;
+}): ClusterCode {
+  const rawCluster = String(user?.cluster || '').trim().toUpperCase();
+  if (rawCluster === 'VBC') return 'VC';
+  if (rawCluster in FROO_CLUSTERS) {
+    return rawCluster as ClusterCode;
+  }
+
+  const office = String(user?.office || '').trim();
+  const officeUpper = office.toUpperCase();
+  const officeLower = office.toLowerCase();
+
+  if (officeUpper.includes('NLC') || officeLower.includes('north luzon')) return 'NLC';
+  if (officeUpper.includes('SLC') || officeLower.includes('south luzon')) return 'SLC';
+  if (officeUpper.includes('VC') || officeUpper.includes('VBC') || officeLower.includes('visayas')) return 'VC';
+  if (officeUpper.includes('MEC') || officeLower.includes('mindanao east')) return 'MEC';
+  if (officeUpper.includes('MWC') || officeLower.includes('mindanao west')) return 'MWC';
+
+  const byRegion = getClusterForRegion(office);
+  if (byRegion) return byRegion.code;
+
+  return 'NLC';
+}
+

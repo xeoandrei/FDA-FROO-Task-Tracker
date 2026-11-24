@@ -9,6 +9,7 @@ import taskRoutes from './routes/taskRoutes';
 import dispatchRoutes from './routes/dispatchRoutes';
 import systemLogRoutes from './routes/systemLogRoutes';
 import referenceRoutes from './routes/referenceRoutes';
+import doctrackRoutes from './routes/doctrackRoutes';
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 4000);
@@ -19,7 +20,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-User-Id, X-User-Email, X-Session-Id');
 
   if (req.method === 'OPTIONS') {
     res.sendStatus(204);
@@ -28,7 +29,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -37,6 +38,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api', dispatchRoutes); // /api/tasks/:taskId/dispatches and /api/dispatches/:id/*
 app.use('/api/system-logs', systemLogRoutes);
 app.use('/api/references', referenceRoutes);
+app.use('/api/doctrack', doctrackRoutes);
 
 // Friendly root endpoint when opening http://localhost:4000 in the browser
 app.get('/', (_req, res) => {

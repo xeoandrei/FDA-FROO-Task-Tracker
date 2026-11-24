@@ -14,6 +14,7 @@ import {
   Clock,
   Building,
   LogOut,
+  KeyRound,
 } from 'lucide-react';
 import { UserAccount, UserPosition, UserRole, ClusterCode, AccountStatus } from '../types/auth';
 import { FROO_OFFICES } from '../data/offices';
@@ -26,6 +27,7 @@ import {
   logSystemAction,
   SUPERADMIN_EMAIL,
 } from '../utils/authStorage';
+import { useSystemConfig } from '../utils/systemConfigStorage';
 import { api } from '../api/client';
 
 interface UserManagementModalProps {
@@ -75,11 +77,24 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [newCluster, setNewCluster] = useState<ClusterCode>('SLC');
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [systemConfig] = useSystemConfig();
+  const dynamicOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
+  const dynamicPositions = systemConfig.positions || [];
+  const isSuperAdmin = currentUser.role === 'SUPERADMIN';
+
   const [confirmingUserAction, setConfirmingUserAction] = useState<{
     userId: string;
     type: 'approve' | 'toggle' | 'delete' | 'force-logout';
   } | null>(null);
   const [isProcessingUserAction, setIsProcessingUserAction] = useState(false);
+
+  // Superadmin change user password state
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('fda@2026');
+  const [resetPasswordFeedback, setResetPasswordFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   if (!isOpen) return null;
 
@@ -210,6 +225,55 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       `Administrator force-terminated active session of ${target.firstName} ${target.lastName} (${target.email}).`,
       { targetEntityId: target.id, targetEntityName: target.email }
     );
+  };
+
+  const handleSuperadminResetPassword = async (target: UserAccount) => {
+    if (!isSuperAdmin) return;
+    const cleanPass = resetPasswordInput.trim();
+    if (cleanPass.length < 6) {
+      setResetPasswordFeedback({
+        type: 'error',
+        message: 'New password must be at least 6 characters long.',
+      });
+      return;
+    }
+
+    try {
+      setIsProcessingUserAction(true);
+      await api.adminResetUserPassword(target.id, cleanPass);
+    } catch (err: any) {
+      console.warn('Backend password reset notice:', err.message);
+    } finally {
+      setIsProcessingUserAction(false);
+    }
+
+    const updated: UserAccount[] = users.map((u) =>
+      u.id === target.id
+        ? {
+            ...u,
+            password: cleanPass,
+            hasActiveSession: false,
+            lastActivity: 'Password changed by Superadmin',
+          }
+        : u
+    );
+
+    saveStoredUsers(updated);
+    setUsers(updated);
+    onUserListChanged();
+
+    logSystemAction(
+      'USER_UPDATED',
+      currentUser,
+      `Superadmin changed password for ${target.firstName} ${target.lastName} (${target.email}).`,
+      { targetEntityId: target.id, targetEntityName: target.email }
+    );
+
+    setResetPasswordUserId(null);
+    setResetPasswordFeedback({
+      type: 'success',
+      message: `Password for ${target.firstName} ${target.lastName} (${target.email}) updated to "${cleanPass}".`,
+    });
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -452,6 +516,32 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           </div>
         )}
 
+        {resetPasswordFeedback && (
+          <div
+            className={`px-4 md:px-6 py-2.5 border-b flex items-center justify-between text-xs gap-2 ${
+              resetPasswordFeedback.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {resetPasswordFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span className="font-semibold">{resetPasswordFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResetPasswordFeedback(null)}
+              className="text-xs font-bold hover:underline cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Filters and Controls */}
         <div className="p-3 md:p-4 border-b border-slate-200 bg-white flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-2.5 md:gap-3">
           <div className="relative flex-1 min-w-0 md:min-w-[220px]">
@@ -593,7 +683,49 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </div>
 
                     {/* Actions Row */}
-                    <div className="pt-2 border-t border-slate-100">
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      {isSuperAdmin && resetPasswordUserId === user.id && (
+                        <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-purple-900 flex items-center gap-1">
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>Set New Password for {user.firstName}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setResetPasswordInput('fda@2026')}
+                              className="text-[10px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded border border-purple-200 cursor-pointer"
+                            >
+                              Use fda@2026
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={resetPasswordInput}
+                              onChange={(e) => setResetPasswordInput(e.target.value)}
+                              placeholder="Min 6 chars"
+                              className="flex-1 text-xs font-mono bg-white border border-purple-300 rounded px-2.5 py-1.5"
+                            />
+                            <button
+                              type="button"
+                              disabled={isProcessingUserAction}
+                              onClick={() => handleSuperadminResetPassword(user)}
+                              className="px-2.5 py-1.5 text-[11px] font-bold text-white bg-purple-700 hover:bg-purple-800 rounded cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setResetPasswordUserId(null)}
+                              className="px-2 py-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 rounded cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {isSuperadminAccount ? (
                         <span className="inline-block text-[10.5px] text-purple-700 font-semibold px-2 py-0.5 bg-purple-50 rounded border border-purple-200">
                           Root Protected
@@ -674,6 +806,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetPasswordUserId(
+                                  resetPasswordUserId === user.id ? null : user.id
+                                );
+                                setResetPasswordInput('fda@2026');
+                              }}
+                              className="min-h-[36px] px-2.5 py-1 text-[11px] font-semibold text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg flex items-center gap-1 cursor-pointer"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>Change Password</span>
+                            </button>
+                          )}
                           {user.status === 'active' && user.id !== currentUser.id && (
                             <button
                               type="button"
@@ -907,42 +1054,85 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               </>
                             ) : (
                               <>
-                                {user.status === 'active' && user.id !== currentUser.id && (
-                                  <button
-                                    onClick={() =>
-                                      setConfirmingUserAction({
-                                        userId: user.id,
-                                        type: 'force-logout',
-                                      })
-                                    }
-                                    title="Force Sign Out Active Session"
-                                    className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
-                                  >
-                                    <LogOut className="w-3.5 h-3.5" />
-                                  </button>
+                                {isSuperAdmin && resetPasswordUserId === user.id ? (
+                                  <div className="flex items-center justify-end gap-1.5 bg-purple-50 border border-purple-200 px-2 py-1 rounded-md">
+                                    <KeyRound className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                    <input
+                                      type="text"
+                                      value={resetPasswordInput}
+                                      onChange={(e) => setResetPasswordInput(e.target.value)}
+                                      placeholder="New password"
+                                      className="w-28 text-[11px] font-mono bg-white border border-purple-300 rounded px-2 py-0.5 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingUserAction}
+                                      onClick={() => handleSuperadminResetPassword(user)}
+                                      className="px-2 py-0.5 text-[10.5px] font-bold text-white bg-purple-700 hover:bg-purple-800 rounded cursor-pointer"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setResetPasswordUserId(null)}
+                                      className="px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-600 bg-white border border-slate-300 rounded cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {isSuperAdmin && (
+                                      <button
+                                        onClick={() => {
+                                          setResetPasswordUserId(user.id);
+                                          setResetPasswordInput('fda@2026');
+                                        }}
+                                        title="Change / Reset User Password (Superadmin)"
+                                        className="px-2 py-1 text-[10.5px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition-colors flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <KeyRound className="w-3 h-3" />
+                                        <span>Password</span>
+                                      </button>
+                                    )}
+                                    {user.status === 'active' && user.id !== currentUser.id && (
+                                      <button
+                                        onClick={() =>
+                                          setConfirmingUserAction({
+                                            userId: user.id,
+                                            type: 'force-logout',
+                                          })
+                                        }
+                                        title="Force Sign Out Active Session"
+                                        className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                                      >
+                                        <LogOut className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() =>
+                                        setConfirmingUserAction({ userId: user.id, type: 'toggle' })
+                                      }
+                                      title={user.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
+                                      className={`p-1.5 rounded transition-colors cursor-pointer ${
+                                        user.status === 'active'
+                                          ? 'text-amber-600 hover:bg-amber-50'
+                                          : 'text-emerald-600 hover:bg-emerald-50'
+                                      }`}
+                                    >
+                                      {user.status === 'active' ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        setConfirmingUserAction({ userId: user.id, type: 'delete' })
+                                      }
+                                      title="Delete Account"
+                                      className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
                                 )}
-                                <button
-                                  onClick={() =>
-                                    setConfirmingUserAction({ userId: user.id, type: 'toggle' })
-                                  }
-                                  title={user.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
-                                  className={`p-1.5 rounded transition-colors cursor-pointer ${
-                                    user.status === 'active'
-                                      ? 'text-amber-600 hover:bg-amber-50'
-                                      : 'text-emerald-600 hover:bg-emerald-50'
-                                  }`}
-                                >
-                                  {user.status === 'active' ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    setConfirmingUserAction({ userId: user.id, type: 'delete' })
-                                  }
-                                  title="Delete Account"
-                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
                               </>
                             )}
                           </>
@@ -1062,15 +1252,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     onChange={(e) => setNewPosition(e.target.value as UserPosition)}
                     className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
                   >
-                    <option value="IT Developer">IT Developer</option>
-                    <option value="Food-Drug Regulation Officer (FDRO)">Food-Drug Regulation Officer (FDRO)</option>
-                    <option value="Licensing Officer">Licensing Officer</option>
-                    <option value="Information Officer">Information Officer</option>
-                    <option value="Administrative">Administrative</option>
-                    <option value="Regional Supervisor">Regional Supervisor</option>
-                    <option value="Cluster Director">Cluster Director</option>
-                    <option value="ODDG-FROO Staff">ODDG-FROO Staff (Admin)</option>
-                    <option value="Deputy Director General (DDG-FROO)">Deputy Director General (DDG-FROO)</option>
+                    {dynamicPositions.map((p) => (
+                      <option key={p.title} value={p.title}>
+                        {p.title} ({p.defaultRole})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1107,7 +1293,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       onChange={(e) => setNewOffice(e.target.value)}
                       className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 focus:border-[#056839]"
                     >
-                      {FROO_OFFICES.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
+                      {dynamicOffices.filter((o) => o.code !== 'ODDG-FROO').map((o) => (
                         <option key={o.id} value={o.code}>
                           {o.name}
                         </option>

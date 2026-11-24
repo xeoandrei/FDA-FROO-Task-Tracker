@@ -200,6 +200,61 @@ export async function runAutoSeed(): Promise<void> {
           PRIMARY KEY (id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
+
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS doctrack_upload_history (
+          id VARCHAR(40) NOT NULL,
+          file_name VARCHAR(255) NOT NULL,
+          uploaded_by_user_id CHAR(36) NULL,
+          uploaded_by_name VARCHAR(150) NOT NULL,
+          uploaded_by_office VARCHAR(50) NOT NULL,
+          alias_used VARCHAR(150) NOT NULL,
+          connection_mode VARCHAR(30) NOT NULL DEFAULT 'LOCAL_TEST',
+          total_count INT NOT NULL DEFAULT 0,
+          valid_count INT NOT NULL DEFAULT 0,
+          inserted_count INT NOT NULL DEFAULT 0,
+          synced_task_count INT NOT NULL DEFAULT 0,
+          failed_count INT NOT NULL DEFAULT 0,
+          failed_records_json LONGTEXT NULL,
+          uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_doctrack_history_user (uploaded_by_user_id),
+          KEY idx_doctrack_history_office (uploaded_by_office),
+          KEY idx_doctrack_history_date (uploaded_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS doctrack_upload_history_records (
+          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          history_id VARCHAR(40) NOT NULL,
+          row_num INT NOT NULL,
+          rsn VARCHAR(50) NOT NULL,
+          raw_remarks TEXT NOT NULL,
+          final_remarks TEXT NOT NULL,
+          docrec_id BIGINT NULL,
+          matched_task_id VARCHAR(40) NULL,
+          status VARCHAR(30) NOT NULL DEFAULT 'INSERTED',
+          error_reason VARCHAR(255) NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_doctrack_records_history (history_id),
+          KEY idx_doctrack_records_rsn (rsn),
+          CONSTRAINT fk_doctrack_records_history
+            FOREIGN KEY (history_id) REFERENCES doctrack_upload_history (id)
+            ON UPDATE CASCADE ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS system_configurations (
+          config_key VARCHAR(64) NOT NULL,
+          config_json LONGTEXT NOT NULL,
+          updated_by VARCHAR(150) NULL,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (config_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
     }
 
     // 1. Seed clusters if needed

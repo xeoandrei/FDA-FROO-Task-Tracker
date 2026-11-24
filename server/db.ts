@@ -122,6 +122,8 @@ export const fallbackStore = {
       created_at: new Date().toISOString(),
     },
   ] as any[],
+  doctrack_upload_history: [] as any[],
+  doctrack_upload_history_records: [] as any[],
 };
 
 // -----------------------------------------------------------------------------
@@ -704,6 +706,109 @@ function executeFallbackQuery(sql: string, params: any[] = []): [any[], any] {
     };
     fallbackStore.system_audit_logs.unshift(newLog);
     return [{ affectedRows: 1, insertId: newLog.id }, []] as any;
+  }
+
+  // 21. DOCTRACK INTEGRATION & TASK DTN QUERIES
+  if (normalizedSql.includes("FROM tasks WHERE dtn IS NOT NULL AND dtn != 'N/A'")) {
+    const list = fallbackStore.tasks.filter((t) => t.dtn && t.dtn !== 'N/A');
+    return [list, []];
+  }
+  if (normalizedSql.includes('SELECT id, dtn, task_title, status, region, assigned_office_code, remarks FROM tasks WHERE dtn = ?')) {
+    const targetDtn = String(params[0] || '').trim();
+    const list = fallbackStore.tasks.filter((t) => String(t.dtn || '').trim() === targetDtn);
+    return [list, []];
+  }
+  if (normalizedSql.startsWith('UPDATE tasks SET remarks = ? WHERE id = ?')) {
+    const [newRemarks, taskId] = params;
+    const found = fallbackStore.tasks.find((t) => t.id === taskId);
+    if (found) {
+      found.remarks = newRemarks;
+    }
+    return [{ affectedRows: found ? 1 : 0 }, []] as any;
+  }
+  if (normalizedSql.startsWith('INSERT INTO doctrack_upload_history (')) {
+    const [
+      id,
+      file_name,
+      uploaded_by_user_id,
+      uploaded_by_name,
+      uploaded_by_office,
+      alias_used,
+      connection_mode,
+      total_count,
+      valid_count,
+      inserted_count,
+      synced_task_count,
+      failed_count,
+      failed_records_json,
+    ] = params;
+    const entry = {
+      id,
+      file_name,
+      uploaded_by_user_id,
+      uploaded_by_name,
+      uploaded_by_office,
+      alias_used,
+      connection_mode,
+      total_count: Number(total_count || 0),
+      valid_count: Number(valid_count || 0),
+      inserted_count: Number(inserted_count || 0),
+      synced_task_count: Number(synced_task_count || 0),
+      failed_count: Number(failed_count || 0),
+      failed_records_json: failed_records_json || '[]',
+      uploaded_at: new Date().toISOString(),
+    };
+    fallbackStore.doctrack_upload_history.unshift(entry);
+    return [{ affectedRows: 1, insertId: id }, []] as any;
+  }
+  if (normalizedSql.startsWith('INSERT INTO doctrack_upload_history_records (')) {
+    const [
+      history_id,
+      row_num,
+      rsn,
+      raw_remarks,
+      final_remarks,
+      docrec_id,
+      matched_task_id,
+      status,
+      error_reason,
+    ] = params;
+    const rec = {
+      id: fallbackStore.doctrack_upload_history_records.length + 1,
+      history_id,
+      row_num: Number(row_num || 0),
+      rsn,
+      raw_remarks,
+      final_remarks,
+      docrec_id: docrec_id ?? null,
+      matched_task_id: matched_task_id ?? null,
+      status: status || 'INSERTED',
+      error_reason: error_reason ?? null,
+      created_at: new Date().toISOString(),
+    };
+    fallbackStore.doctrack_upload_history_records.push(rec);
+    return [{ affectedRows: 1, insertId: rec.id }, []] as any;
+  }
+  if (normalizedSql.startsWith('SELECT * FROM doctrack_upload_history WHERE id = ?')) {
+    const historyId = params[0];
+    const found = fallbackStore.doctrack_upload_history.find((h) => h.id === historyId);
+    return [found ? [found] : [], []];
+  }
+  if (normalizedSql.startsWith('SELECT * FROM doctrack_upload_history')) {
+    let list = [...fallbackStore.doctrack_upload_history];
+    if (normalizedSql.includes('WHERE uploaded_by_user_id = ? OR uploaded_by_office = ?')) {
+      const [uid, office] = params;
+      list = list.filter((h) => h.uploaded_by_user_id === uid || h.uploaded_by_office === office);
+    }
+    list.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+    return [list.slice(0, 100), []];
+  }
+  if (normalizedSql.includes('FROM doctrack_upload_history_records WHERE history_id = ?')) {
+    const historyId = params[0];
+    const list = fallbackStore.doctrack_upload_history_records
+      .filter((r) => r.history_id === historyId)
+      .sort((a, b) => a.row_num - b.row_num);
+    return [list, []];
   }
 
   // Generic fallback

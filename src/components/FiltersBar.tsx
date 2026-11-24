@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Search, RotateCcw, SlidersHorizontal, Building2, X, ChevronUp } from 'lucide-react';
 import { CATEGORIES, ORIGINS, PRIORITIES, STATUSES, FROO_OFFICES } from '../data/offices';
 import { UserRole } from '../types/auth';
+import { useSystemConfig } from '../utils/systemConfigStorage';
+import { doesRegionMatch } from '../utils/taskAuthorization';
 
 interface FiltersBarProps {
   searchQuery: string;
@@ -42,19 +44,20 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   scopeLabel,
 }) => {
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [systemConfig] = useSystemConfig();
+  const dynamicCategories = systemConfig.categories?.length ? systemConfig.categories : CATEGORIES;
+  const dynamicOrigins = systemConfig.origins?.length ? systemConfig.origins : ORIGINS;
+  const dynamicOffices = systemConfig.offices?.length ? systemConfig.offices : FROO_OFFICES;
 
-  // Filter offices based on allowed jurisdictions
+  // Filter offices based on allowed jurisdictions (using exact canonical matching so Region 1 never matches Region 10..13)
   const availableOffices =
     allowedRegions && allowedRegions.length > 0
-      ? FROO_OFFICES.filter((o) =>
+      ? dynamicOffices.filter((o) =>
           allowedRegions.some(
-            (ar) =>
-              ar.toLowerCase() === o.code.toLowerCase() ||
-              ar.toLowerCase() === o.name.toLowerCase() ||
-              o.code.toLowerCase().includes(ar.toLowerCase())
+            (ar) => doesRegionMatch(o.code, ar) || doesRegionMatch(o.name, ar)
           )
         )
-      : FROO_OFFICES;
+      : dynamicOffices;
 
   const activeDropdownCount = [
     selectedCategory !== 'All',
@@ -129,7 +132,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
                   className="w-full min-h-[42px] text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-none focus:border-[#056839]"
                 >
                   <option value="All">All Categories</option>
-                  {CATEGORIES.map((cat) => (
+                  {dynamicCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -147,7 +150,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
                   className="w-full min-h-[42px] text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-none focus:border-[#056839]"
                 >
                   <option value="All">All Origins</option>
-                  {ORIGINS.map((orig) => (
+                  {dynamicOrigins.map((orig) => (
                     <option key={orig} value={orig}>
                       {orig}
                     </option>
@@ -230,15 +233,6 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             </div>
           </div>
         )}
-
-        {scopeLabel && (
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 pt-1.5 border-t border-slate-100">
-            <Building2 className="w-3.5 h-3.5 text-[#056839] shrink-0" />
-            <span className="truncate">
-              Scope: <strong className="text-slate-700">{scopeLabel}</strong>
-            </span>
-          </div>
-        )}
       </div>
 
       {/* ================= DESKTOP FILTERS BAR (>= 768px — UNCHANGED) ================= */}
@@ -264,7 +258,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
               className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
             >
               <option value="All">Category</option>
-              {CATEGORIES.map((cat) => (
+              {dynamicCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
@@ -280,7 +274,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
               className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
             >
               <option value="All">Origin</option>
-              {ORIGINS.map((orig) => (
+              {dynamicOrigins.map((orig) => (
                 <option key={orig} value={orig}>
                   {orig}
                 </option>
@@ -351,15 +345,6 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             <span>Reset</span>
           </button>
         </div>
-
-        {scopeLabel && (
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-            <Building2 className="w-3.5 h-3.5 text-[#056839]" />
-            <span>
-              Jurisdiction Visibility: <strong className="text-slate-700">{scopeLabel}</strong>
-            </span>
-          </div>
-        )}
       </div>
     </>
   );

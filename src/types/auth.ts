@@ -15,7 +15,8 @@ export type UserPosition =
   | 'Food-Drug Regulation Officer (FDRO)'
   | 'Licensing Officer'
   | 'Information Officer'
-  | 'Administrative';
+  | 'Administrative'
+  | (string & {});
 
 export type ClusterCode = 'NLC' | 'SLC' | 'VC' | 'MEC' | 'MWC';
 
@@ -66,7 +67,10 @@ export type SystemActionType =
   | 'DISPATCH_CREATED'
   | 'DISPATCH_APPROVED'
   | 'DISPATCH_REJECTED'
-  | 'DISPATCH_DELETED';
+  | 'DISPATCH_DELETED'
+  | 'DOCTRACK_BULK_UPLOAD'
+  | 'DOCTRACK_DTN_SEARCH'
+  | 'SYSTEM_CONFIG_UPDATED';
 
 export interface SystemLog {
   id: string;

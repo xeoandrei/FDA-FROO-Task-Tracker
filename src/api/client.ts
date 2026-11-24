@@ -1,5 +1,12 @@
 import { Task } from '../types/task';
 import { UserAccount, SystemLog } from '../types/auth';
+import {
+  DoctrackStatusResponse,
+  DoctrackBulkUploadResponse,
+  DoctrackDtnSearchResponse,
+  DoctrackUploadHistoryBatch,
+  DoctrackUploadHistoryDetailResponse,
+} from '../types/doctrack';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_KEY = 'froo_jwt_token_v1';
@@ -248,6 +255,25 @@ export const api = {
     });
   },
 
+  async adminResetUserPassword(id: string, newPassword: string): Promise<{ success: boolean; id: string; message: string }> {
+    return request(`/api/users/${id}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ newPassword }),
+    });
+  },
+
+  // Dynamic System Configuration (Superadmin CRUD)
+  async getSystemConfig(): Promise<any> {
+    return request('/api/references/config');
+  },
+
+  async updateSystemConfig(config: any): Promise<any> {
+    return request('/api/references/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  },
+
   // Tasks
   async getTasks(): Promise<Task[]> {
     return request('/api/tasks');
@@ -271,15 +297,16 @@ export const api = {
     });
   },
 
-  async receiveTask(taskId: string): Promise<Task> {
+  async receiveTask(taskId: string, syncToFis = true): Promise<Task> {
     return request(`/api/tasks/${taskId}/receive`, {
       method: 'POST',
+      body: JSON.stringify({ syncToFis }),
     });
   },
 
   async completeTask(
     taskId: string,
-    outcomeOrData: string | { outcome: string; remarks?: string },
+    outcomeOrData: string | { outcome: string; remarks?: string; syncToFis?: boolean },
     remarksParam?: string
   ): Promise<Task> {
     const body =
@@ -294,7 +321,7 @@ export const api = {
 
   async addTaskActivity(
     taskId: string,
-    notesOrData: string | { action?: string; notes?: string; newStatus?: string },
+    notesOrData: string | { action?: string; notes?: string; newStatus?: string; syncToFis?: boolean },
     newStatusParam?: string,
     actionParam?: string
   ): Promise<Task> {
@@ -305,6 +332,16 @@ export const api = {
     return request(`/api/tasks/${taskId}/activity`, {
       method: 'POST',
       body: JSON.stringify(body),
+    });
+  },
+
+  async syncTaskActivityToFis(
+    taskId: string,
+    remarkText: string
+  ): Promise<{ success: boolean; mode: string; docrecID?: number; finalRemarks?: string }> {
+    return request(`/api/tasks/${taskId}/sync-fis-activity`, {
+      method: 'POST',
+      body: JSON.stringify({ remarkText }),
     });
   },
 
@@ -374,4 +411,35 @@ export const api = {
       }),
     });
   },
+
+  // FIS Doctrack Integration (CDRR Bulk Upload & DTN Lookup)
+  async getDoctrackStatus(): Promise<DoctrackStatusResponse> {
+    return request('/api/doctrack/status');
+  },
+
+  async submitDoctrackBulkUpload(payload: {
+    fileName: string;
+    rows?: Array<{ rowNum: number; rsn: string; remarks: string }>;
+    fileBase64?: string;
+    customAlias?: string;
+    syncFrooTasks?: boolean;
+  }): Promise<DoctrackBulkUploadResponse> {
+    return request('/api/doctrack/bulk-upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async searchDoctrackDtn(dtn: string): Promise<DoctrackDtnSearchResponse> {
+    return request(`/api/doctrack/dtn/${encodeURIComponent(dtn.trim())}`);
+  },
+
+  async getDoctrackHistory(): Promise<DoctrackUploadHistoryBatch[]> {
+    return request('/api/doctrack/history');
+  },
+
+  async getDoctrackHistoryDetails(historyId: string): Promise<DoctrackUploadHistoryDetailResponse> {
+    return request(`/api/doctrack/history/${encodeURIComponent(historyId)}`);
+  },
 };
+
