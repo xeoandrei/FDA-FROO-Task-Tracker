@@ -1,8 +1,27 @@
 import React from 'react';
 import { Task, TaskStatus, TaskPriority } from '../types/task';
+import { UserAccount } from '../types/auth';
 import { formatDate } from '../utils/storage';
-import { splitAssigneeNames, isNameSuffixToken } from '../utils/taskAuthorization';
-import { ChevronRight, Building2, Calendar, User } from 'lucide-react';
+import {
+  splitAssigneeNames,
+  isNameSuffixToken,
+  isUserAssignedToTask,
+  isUserCreatedTask,
+} from '../utils/taskAuthorization';
+import {
+  ChevronRight,
+  Building2,
+  Calendar,
+  User,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  Inbox,
+  Flame,
+  ArrowUp,
+  Minus,
+  ArrowDown,
+} from 'lucide-react';
 
 interface TaskListProps {
   tasks: Task[];
@@ -10,6 +29,7 @@ interface TaskListProps {
   selectedTaskId?: string;
   onQuickStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
   onReceiveTask?: (task: Task) => void;
+  currentUser?: UserAccount | null;
   currentUserName?: string;
   activeView?: 'MY_TASKS' | 'TASKS_TO_RECEIVE' | 'ALL_TASKS';
 }
@@ -102,84 +122,238 @@ export function formatShortAssigneeList(assignedToRaw: string): string {
   return parts.map(formatShortPersonName).join(', ');
 }
 
+/**
+ * Computes relative due date countdown metadata with tabular numerals.
+ */
+function getDueDateMeta(dueDateStr: string, status: TaskStatus): {
+  label: string;
+  className: string;
+} {
+  if (status === 'Completed') {
+    return {
+      label: 'Completed',
+      className: 'text-emerald-700 font-medium',
+    };
+  }
+
+  if (!dueDateStr) {
+    return {
+      label: '',
+      className: 'text-slate-400',
+    };
+  }
+
+  const parsed = new Date(`${dueDateStr}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      label: '',
+      className: 'text-slate-500',
+    };
+  }
+
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffMs = parsed.getTime() - todayMidnight.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const overdueDays = Math.abs(diffDays);
+    return {
+      label: `${overdueDays}d overdue`,
+      className: 'text-rose-700 font-semibold',
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: 'Due today',
+      className: 'text-amber-700 font-semibold',
+    };
+  }
+  if (diffDays === 1) {
+    return {
+      label: 'Due tomorrow',
+      className: 'text-amber-700 font-medium',
+    };
+  }
+  if (diffDays <= 3) {
+    return {
+      label: `${diffDays}d left`,
+      className: 'text-amber-700 font-medium',
+    };
+  }
+  return {
+    label: `${diffDays}d left`,
+    className: 'text-slate-500',
+  };
+}
+
 export const TaskList: React.FC<TaskListProps> = ({
   tasks,
   onSelectTask,
   selectedTaskId,
   onReceiveTask,
+  currentUser = null,
   activeView = 'ALL_TASKS',
 }) => {
-  const getStatusBadge = (status: TaskStatus) => {
+  const getStatusIndicator = (status: TaskStatus) => {
     switch (status) {
       case 'In Progress':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100/90 text-amber-900 border border-amber-200/60 whitespace-nowrap">
-            In Progress
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 whitespace-nowrap">
+            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>In Progress</span>
           </span>
         );
       case 'Open':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100/90 text-blue-900 border border-blue-200/60 whitespace-nowrap">
-            Open
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-800 whitespace-nowrap">
+            <Inbox className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>Open</span>
           </span>
         );
       case 'Completed':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100/90 text-emerald-900 border border-emerald-200/60 whitespace-nowrap">
-            Completed
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 whitespace-nowrap">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>Completed</span>
           </span>
         );
       case 'Overdue':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100/90 text-rose-900 border border-rose-200/60 whitespace-nowrap">
-            Overdue
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-800 whitespace-nowrap">
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+            <span>Overdue</span>
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-800 whitespace-nowrap">
+          <span className="inline-flex items-center text-xs font-semibold text-slate-700 whitespace-nowrap">
             {status}
           </span>
         );
     }
   };
 
-  const getPriorityBadge = (priority: TaskPriority) => {
+  /**
+   * Compact Priority Symbol / Icon with accessible title tooltip (replaces long text labels).
+   */
+  const getPrioritySymbol = (priority: TaskPriority) => {
     switch (priority) {
       case 'Urgent':
-        return <span className="text-red-700 font-bold text-xs">Urgent</span>;
-      case 'Normal':
-        return <span className="text-slate-700 font-medium text-xs">Normal</span>;
+        return (
+          <span
+            title="Priority: Urgent"
+            aria-label="Priority: Urgent"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/80 shrink-0"
+          >
+            <Flame className="w-3.5 h-3.5 fill-rose-500/20" />
+          </span>
+        );
       case 'High':
-        return <span className="text-rose-600 font-semibold text-xs">High</span>;
-      case 'Medium':
-        return <span className="text-slate-700 font-medium text-xs">Medium</span>;
+        return (
+          <span
+            title="Priority: High"
+            aria-label="Priority: High"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/80 shrink-0"
+          >
+            <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+          </span>
+        );
       case 'Low':
-        return <span className="text-slate-500 text-xs">Low</span>;
+        return (
+          <span
+            title="Priority: Low"
+            aria-label="Priority: Low"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-50 text-slate-400 border border-slate-200/60 shrink-0"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </span>
+        );
+      case 'Normal':
+      case 'Medium':
       default:
-        return <span className="text-slate-600 text-xs">{priority}</span>;
+        return (
+          <span
+            title={`Priority: ${priority}`}
+            aria-label={`Priority: ${priority}`}
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100/80 text-slate-600 border border-slate-200/80 shrink-0"
+          >
+            <Minus className="w-3.5 h-3.5 stroke-[2.25]" />
+          </span>
+        );
     }
+  };
+
+  const getPersonalRelationshipText = (task: Task): string | null => {
+    if (!currentUser) return null;
+    const assigned = isUserAssignedToTask(task, currentUser);
+    const created = isUserCreatedTask(task, currentUser);
+    if (assigned && created) return 'Assigned & Created by you';
+    if (assigned) return 'Assigned to you';
+    if (created) return 'Created by you';
+    return null;
+  };
+
+  const canShowInlineReceive = (task: Task): boolean => {
+    if (task.status !== 'Open' || Boolean(task.receivedAt) || !onReceiveTask) return false;
+    if (!currentUser) return true;
+    return isUserAssignedToTask(task, currentUser);
   };
 
   const emptyMessage =
     activeView === 'MY_TASKS'
-      ? 'You currently have no tasks assigned or requiring your direct action in this filter.'
+      ? 'You currently have no tasks directly assigned to you or created by you in this filter.'
       : activeView === 'TASKS_TO_RECEIVE'
-      ? 'No dispatched tasks currently awaiting receipt by authorized recipient.'
+      ? 'You have no unreceived tasks directly assigned to you.'
       : 'No operational tasks in this scope or matching your filters.';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-      <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-100 flex items-center justify-between">
+      {/* Header Bar with Task Count & Compact Priority Symbol Legend */}
+      <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm md:text-base font-bold text-slate-900">Task List</h2>
-          <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
-            Showing {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm md:text-base font-bold text-slate-900">
+              {activeView === 'MY_TASKS'
+                ? 'My Tasks'
+                : activeView === 'TASKS_TO_RECEIVE'
+                ? 'Tasks to Receive'
+                : 'Task List'}
+            </h2>
+            <span className="text-xs text-slate-300" aria-hidden="true">
+              ·
+            </span>
+            <span className="text-xs font-semibold text-slate-600 tabular-nums">
+              Showing {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {activeView === 'MY_TASKS'
+              ? 'Directly assigned to you or created by you'
+              : activeView === 'TASKS_TO_RECEIVE'
+              ? 'Unreceived tasks assigned directly to you'
+              : 'Click any task row to inspect activity logs, dispatch orders, or update status'}
           </p>
+        </div>
+
+        {/* Compact Priority Symbol Legend */}
+        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1" title="Urgent Priority">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-rose-50 text-rose-600 border border-rose-200/80">
+              <Flame className="w-3 h-3 fill-rose-500/20" />
+            </span>
+            <span>Urgent</span>
+          </span>
+          <span className="inline-flex items-center gap-1" title="Normal Priority">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/80">
+              <Minus className="w-3 h-3 stroke-[2.25]" />
+            </span>
+            <span>Normal</span>
+          </span>
         </div>
       </div>
 
-      {/* ================= MOBILE TOUCH-FRIENDLY TASK CARDS (< 768px) ================= */}
+      {/* ================= MOBILE STREAMLINED TOUCH CARD FEED (< 768px) ================= */}
       <div className="md:hidden">
         {tasks.length === 0 ? (
           <div className="py-12 px-5 text-center text-slate-400">
@@ -187,11 +361,15 @@ export const TaskList: React.FC<TaskListProps> = ({
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">{emptyMessage}</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200/80">
             {tasks.map((task) => {
               const isSelected = selectedTaskId === task.id;
               const shortAssignees = formatShortAssigneeList(task.assignedTo);
               const shortReceiver = task.receivedBy ? formatShortPersonName(task.receivedBy) : '';
+              const shortCreator = task.createdBy ? formatShortPersonName(task.createdBy) : 'ODDG-FROO';
+              const dueMeta = getDueDateMeta(task.dueDate, task.status);
+              const personalRelation = getPersonalRelationshipText(task);
+              const showReceiveBtn = canShowInlineReceive(task);
 
               return (
                 <div
@@ -205,19 +383,19 @@ export const TaskList: React.FC<TaskListProps> = ({
                       onSelectTask(task);
                     }
                   }}
-                  className={`p-4 space-y-2.5 transition active:bg-slate-50 cursor-pointer ${
+                  className={`p-4 space-y-3 transition active:bg-slate-50 cursor-pointer ${
                     isSelected ? 'bg-emerald-50/60' : 'bg-white'
                   }`}
                 >
-                  {/* Row 1: Complete Task Title + Priority */}
+                  {/* Row 1: Complete Task Title + Compact Priority Symbol */}
                   <div className="flex items-start justify-between gap-2.5">
                     <h3 className="text-[14px] font-bold text-[#056839] leading-snug break-words flex-1">
                       {task.taskTitle}
                     </h3>
-                    <div className="shrink-0 pt-0.5">{getPriorityBadge(task.priority)}</div>
+                    {getPrioritySymbol(task.priority)}
                   </div>
 
-                  {/* Row 2: Clean Metadata (DTN · Category · Origin · Office) */}
+                  {/* Row 2: Unboxed Metadata (DTN · Category · Origin · Personal attribution) */}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-slate-500">
                     {task.dtn && (
                       <>
@@ -234,17 +412,30 @@ export const TaskList: React.FC<TaskListProps> = ({
                       ·
                     </span>
                     <span>{task.origin}</span>
+                    {personalRelation && (
+                      <>
+                        <span className="text-slate-300" aria-hidden="true">
+                          ·
+                        </span>
+                        <span className="font-semibold text-[#056839]">{personalRelation}</span>
+                      </>
+                    )}
                   </div>
 
-                  {/* Row 3: Office, Assigned To, Due Date */}
-                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                        <User className="w-3 h-3 shrink-0" />
-                        <span>Assigned To</span>
+                  {/* Row 3: 2-Column Operational Details (Assigned/Created By vs Due Date & Region) */}
+                  <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+                    <div className="min-w-0 space-y-1">
+                      <div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                          <User className="w-3 h-3 shrink-0" />
+                          <span>Assigned To</span>
+                        </div>
+                        <div className="font-semibold text-slate-800 leading-snug break-words">
+                          {shortAssignees}
+                        </div>
                       </div>
-                      <div className="font-semibold text-slate-800 leading-snug break-words">
-                        {shortAssignees}
+                      <div className="text-[11px] text-slate-500 truncate">
+                        By: <span className="font-medium text-slate-700">{shortCreator}</span>
                       </div>
                       {task.status === 'Open' && !task.receivedAt ? (
                         <div className="text-[10.5px] text-amber-700 font-semibold">
@@ -263,22 +454,30 @@ export const TaskList: React.FC<TaskListProps> = ({
                           <Calendar className="w-3 h-3 shrink-0" />
                           <span>Due Date</span>
                         </div>
-                        <div className="font-medium text-slate-700 tabular-nums">
+                        <div className="font-medium text-slate-800 tabular-nums">
                           {formatDate(task.dueDate)}
                         </div>
+                        {dueMeta.label && (
+                          <div className={`text-[10.5px] tabular-nums ${dueMeta.className}`}>
+                            {dueMeta.label}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 pt-0.5">
                         <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="truncate">{task.region}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Row 4: Status, Logs/Dispatch counts, Receive CTA & Details Chevron */}
+                  {/* Row 4: Status, Logs/Dispatch counts, 44px Touch Receive CTA & Details Chevron */}
                   <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      {getStatusBadge(task.status)}
-                      <span className="text-[11px] text-slate-400 tabular-nums">
+                      {getStatusIndicator(task.status)}
+                      <span className="text-slate-300" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="text-[11px] text-slate-500 tabular-nums">
                         {task.activityHistory?.length || 0} logs
                         {task.dispatchSlips && task.dispatchSlips.length > 0
                           ? ` · ${task.dispatchSlips.length} dispatch`
@@ -286,21 +485,23 @@ export const TaskList: React.FC<TaskListProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {task.status === 'Open' && !task.receivedAt && onReceiveTask && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {showReceiveBtn && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onReceiveTask(task);
+                            onReceiveTask?.(task);
                           }}
-                          className="min-h-[36px] px-3.5 text-xs bg-[#056839] hover:bg-[#04522d] text-white rounded-lg font-bold transition cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
+                          className="min-h-[44px] px-4 text-xs bg-[#056839] hover:bg-[#04522d] text-white rounded-xl font-bold transition cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
                           title="Confirm receipt and accept this task"
                         >
                           Receive
                         </button>
                       )}
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                      <div className="min-w-[36px] min-h-[44px] flex items-center justify-center text-slate-400">
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -310,17 +511,17 @@ export const TaskList: React.FC<TaskListProps> = ({
         )}
       </div>
 
-      {/* ================= DESKTOP 6-COLUMN TABLE (>= 768px — UNCHANGED) ================= */}
+      {/* ================= DESKTOP MODERN DATA TABLE (>= 768px) ================= */}
       <div className="hidden md:block w-full overflow-x-auto">
         <table className="w-full text-left border-collapse lg:table-fixed">
           <thead>
-            <tr className="border-b border-slate-200/80 bg-slate-50/70 text-xs font-semibold text-slate-700 tracking-wide">
-              <th className="py-3 px-4 sm:px-5 lg:w-[37%]">Task Title</th>
-              <th className="py-3 px-3 lg:w-[17%]">Category & Office</th>
-              <th className="py-3 px-3 lg:w-[16%]">Assigned To</th>
-              <th className="py-3 px-3 lg:w-[10%]">Due Date</th>
-              <th className="py-3 px-3 lg:w-[12%]">Status</th>
-              <th className="py-3 px-3 lg:w-[8%] text-right">Priority</th>
+            <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-700 tracking-wide">
+              <th className="py-3 px-4 sm:px-5 lg:w-[35%]">Task Title</th>
+              <th className="py-3 px-3 lg:w-[17%]">Category &amp; Office</th>
+              <th className="py-3 px-3 lg:w-[17%]">Assigned To</th>
+              <th className="py-3 px-3 lg:w-[11%]">Due Date</th>
+              <th className="py-3 px-3 lg:w-[10%]">Status</th>
+              <th className="py-3 pl-3 pr-5 sm:pr-6 lg:w-[10%] text-center">Priority</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs sm:text-[13px]">
@@ -337,7 +538,15 @@ export const TaskList: React.FC<TaskListProps> = ({
               tasks.map((task) => {
                 const isSelected = selectedTaskId === task.id;
                 const shortAssignees = formatShortAssigneeList(task.assignedTo);
-                const shortReceiver = task.receivedBy ? formatShortPersonName(task.receivedBy) : '';
+                const shortReceiver = task.receivedBy
+                  ? formatShortPersonName(task.receivedBy)
+                  : '';
+                const shortCreator = task.createdBy
+                  ? formatShortPersonName(task.createdBy)
+                  : 'ODDG-FROO';
+                const dueMeta = getDueDateMeta(task.dueDate, task.status);
+                const personalRelation = getPersonalRelationshipText(task);
+                const showReceiveBtn = canShowInlineReceive(task);
 
                 return (
                   <tr
@@ -347,30 +556,48 @@ export const TaskList: React.FC<TaskListProps> = ({
                       isSelected ? 'bg-emerald-50/60 ring-1 ring-emerald-200' : ''
                     }`}
                   >
-                    {/* Complete Task Title (No internal Task ID) */}
+                    {/* Column 1: Complete Task Title + Unboxed Metadata */}
                     <td className="py-3.5 px-4 sm:px-5">
                       <div className="flex flex-col">
                         <span className="font-semibold text-[#056839] group-hover:underline leading-snug break-words text-[13px] sm:text-sm">
                           {task.taskTitle}
                         </span>
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 flex-wrap">
                           {task.dtn && (
                             <>
-                              <span className="font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/80 font-medium">
-                                DTN: {task.dtn}
+                              <span className="font-mono text-emerald-800 font-semibold tabular-nums">
+                                DTN {task.dtn}
                               </span>
-                              <span>•</span>
+                              <span className="text-slate-300" aria-hidden="true">
+                                ·
+                              </span>
                             </>
                           )}
-                          <span className="text-slate-500 font-medium">Origin: {task.origin}</span>
-                          <span>•</span>
-                          <span>{task.activityHistory?.length || 0} logs</span>
+                          <span>Origin: {task.origin}</span>
+                          <span className="text-slate-300" aria-hidden="true">
+                            ·
+                          </span>
+                          <span className="tabular-nums">
+                            {task.activityHistory?.length || 0} logs
+                          </span>
                           {task.dispatchSlips && task.dispatchSlips.length > 0 && (
                             <>
-                              <span>•</span>
-                              <span className="text-emerald-700 font-semibold">
+                              <span className="text-slate-300" aria-hidden="true">
+                                ·
+                              </span>
+                              <span className="text-emerald-700 font-semibold tabular-nums">
                                 {task.dispatchSlips.length} dispatch{' '}
                                 {task.dispatchSlips.length === 1 ? 'order' : 'orders'}
+                              </span>
+                            </>
+                          )}
+                          {personalRelation && (
+                            <>
+                              <span className="text-slate-300" aria-hidden="true">
+                                ·
+                              </span>
+                              <span className="font-semibold text-[#056839]">
+                                {personalRelation}
                               </span>
                             </>
                           )}
@@ -378,7 +605,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                       </div>
                     </td>
 
-                    {/* Category & Region / Office */}
+                    {/* Column 2: Category & Region / Office */}
                     <td className="py-3.5 px-3">
                       <div className="font-medium text-slate-800 leading-snug break-words">
                         {task.category}
@@ -389,16 +616,21 @@ export const TaskList: React.FC<TaskListProps> = ({
                       </div>
                     </td>
 
-                    {/* Assigned To (First Initial + Last Name) */}
-                    <td className="py-3.5 px-3 text-slate-800 font-medium" title={task.assignedTo}>
-                      <div className="leading-snug break-words">{shortAssignees}</div>
+                    {/* Column 3: Assigned To & Creator Attribution */}
+                    <td className="py-3.5 px-3 text-slate-800" title={task.assignedTo}>
+                      <div className="font-semibold leading-snug break-words">
+                        {shortAssignees}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        By: <span className="font-medium text-slate-700">{shortCreator}</span>
+                      </div>
                       {task.status === 'Open' && !task.receivedAt ? (
-                        <span className="text-[10px] text-amber-700 font-semibold block mt-0.5">
+                        <span className="text-[10.5px] text-amber-700 font-semibold block mt-0.5">
                           Awaiting Receipt
                         </span>
                       ) : task.receivedBy ? (
                         <span
-                          className="text-[10px] text-emerald-700 block mt-0.5 truncate"
+                          className="text-[10.5px] text-emerald-700 block mt-0.5 truncate"
                           title={`Received by ${task.receivedBy}`}
                         >
                           Recv: {shortReceiver}
@@ -406,23 +638,30 @@ export const TaskList: React.FC<TaskListProps> = ({
                       ) : null}
                     </td>
 
-                    {/* Due Date */}
-                    <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap tabular-nums">
-                      {formatDate(task.dueDate)}
+                    {/* Column 4: Due Date */}
+                    <td className="py-3.5 px-3 whitespace-nowrap tabular-nums">
+                      <div className="text-slate-800 font-medium">
+                        {formatDate(task.dueDate)}
+                      </div>
+                      {dueMeta.label && (
+                        <div className={`text-[11px] mt-0.5 ${dueMeta.className}`}>
+                          {dueMeta.label}
+                        </div>
+                      )}
                     </td>
 
-                    {/* Status & Inline Receive Action */}
+                    {/* Column 5: Status & Authorized Inline Receive Action */}
                     <td className="py-3.5 px-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {getStatusBadge(task.status)}
-                        {task.status === 'Open' && !task.receivedAt && onReceiveTask && (
+                      <div className="flex flex-col items-start gap-1.5">
+                        {getStatusIndicator(task.status)}
+                        {showReceiveBtn && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onReceiveTask(task);
+                              onReceiveTask?.(task);
                             }}
-                            className="text-[11px] bg-[#056839] hover:bg-[#04522d] text-white px-2 py-0.5 rounded font-bold transition cursor-pointer shadow-2xs inline-flex items-center gap-1 active:scale-95"
+                            className="text-[11px] bg-[#056839] hover:bg-[#04522d] text-white px-2.5 py-1 rounded-md font-bold transition cursor-pointer shadow-2xs inline-flex items-center gap-1 active:scale-95 whitespace-nowrap"
                             title="Confirm receipt and accept this task"
                           >
                             Receive
@@ -431,10 +670,10 @@ export const TaskList: React.FC<TaskListProps> = ({
                       </div>
                     </td>
 
-                    {/* Priority + Row Chevron */}
-                    <td className="py-3.5 px-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center justify-end gap-1.5">
-                        {getPriorityBadge(task.priority)}
+                    {/* Column 6: Centered Compact Priority Symbol + Row Chevron */}
+                    <td className="py-3.5 pl-3 pr-5 sm:pr-6 text-center whitespace-nowrap">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        {getPrioritySymbol(task.priority)}
                         <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#056839] shrink-0" />
                       </div>
                     </td>

@@ -44,12 +44,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
   return (
     <aside
-      className={`hidden md:flex flex-col shrink-0 bg-white border-r border-slate-200 transition-all duration-200 select-none ${
+      className={`hidden md:flex flex-col shrink-0 self-start sticky top-6 mt-6 ml-4 lg:ml-6 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 select-none overflow-hidden ${
         isCollapsed ? 'w-[68px]' : 'w-60'
       }`}
     >
       {/* Top Workspace Section Header */}
-      <div className="px-3.5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-2">
+      <div className="px-3.5 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
         {!isCollapsed && (
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
             FROO Workspaces
@@ -71,8 +71,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         </button>
       </div>
 
-      {/* Primary Workspace Navigation */}
-      <nav className="flex-1 p-2.5 space-y-1.5 overflow-y-auto">
+      {/* Primary Workspace Navigation (Fits tightly to items with zero empty bottom space) */}
+      <nav className="p-2.5 space-y-1.5">
         {/* 1. Operational Task Tracker */}
         <button
           type="button"
@@ -148,12 +148,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           )}
         </button>
 
-        {/* 3. System Configuration (Superadmin Only) */}
+        {/* 3. System Configuration (Superadmin & ODDG-FROO Admin) */}
         {isSuperAdmin && (
           <button
             type="button"
             onClick={() => onSelectModule('SYSTEM_CONFIG')}
-            title="System Configuration (Superadmin Only)"
+            title="System Configuration (Superadmin & ODDG-FROO Admin)"
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs font-semibold transition cursor-pointer border ${
               activeModule === 'SYSTEM_CONFIG'
                 ? 'bg-emerald-50/90 text-[#056839] border-emerald-200 shadow-2xs'

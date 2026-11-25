@@ -326,6 +326,15 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         actorId = null;
       }
     }
+    if (!actorId && req.user?.email) {
+      const [emailRows]: [any[], any] = await connection.query(
+        'SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1',
+        [req.user.email]
+      );
+      if (emailRows.length > 0) {
+        actorId = emailRows[0].id;
+      }
+    }
 
     const actorName = req.user ? `${req.user.firstName} ${req.user.lastName}` : 'ODDG-FROO Administrator';
     const actorOffice = req.user?.office || 'ODDG-FROO';

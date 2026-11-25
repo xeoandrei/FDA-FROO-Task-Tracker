@@ -71,13 +71,13 @@ export const SystemConfigModule: React.FC<SystemConfigModuleProps> = ({
   // Confirm reset section
   const [confirmingResetTab, setConfirmingResetTab] = useState<ConfigTabKey | null>(null);
 
-  if (currentUser.role !== 'SUPERADMIN') {
+  if (currentUser.role !== 'SUPERADMIN' && currentUser.role !== 'ADMIN') {
     return (
       <div className="bg-white rounded-2xl border border-rose-200 p-8 text-center max-w-lg mx-auto my-12">
         <AlertCircle className="w-8 h-8 text-rose-600 mx-auto mb-2" />
-        <h3 className="text-base font-bold text-slate-900">Superadmin Access Required</h3>
+        <h3 className="text-base font-bold text-slate-900">Admin Access Required</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Only the root Superadmin account is authorized to modify global system configurations.
+          Only Superadmin and ODDG-FROO Admin accounts are authorized to modify global system configurations.
         </p>
       </div>
     );
@@ -404,7 +404,7 @@ export const SystemConfigModule: React.FC<SystemConfigModuleProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-200">
               <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-              <span>Superadmin Live CRUD Control</span>
+              <span>Superadmin &amp; ODDG-FROO Admin CRUD Control</span>
             </span>
             <span className="text-[11px] text-slate-400 font-medium">
               • Changes take effect immediately across the website

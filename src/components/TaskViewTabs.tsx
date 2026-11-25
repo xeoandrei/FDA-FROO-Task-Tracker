@@ -29,14 +29,14 @@ export const TaskViewTabs: React.FC<TaskViewTabsProps> = ({
     {
       id: 'MY_TASKS',
       label: 'My Tasks',
-      description: 'Assigned to you or requiring your direct action',
+      description: 'Directly assigned to you or created by you',
       count: myTasksCount,
       icon: <UserCheck className="w-4 h-4" />,
     },
     {
       id: 'TASKS_TO_RECEIVE',
       label: 'Tasks to Receive',
-      description: 'Dispatched tasks awaiting recipient acknowledgment',
+      description: 'Unreceived tasks assigned directly to you',
       count: tasksToReceiveCount,
       icon: <Inbox className="w-4 h-4" />,
       highlightCount: tasksToReceiveCount > 0,

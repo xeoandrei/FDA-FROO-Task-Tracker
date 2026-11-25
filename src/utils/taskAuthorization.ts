@@ -183,30 +183,47 @@ export function isUserAssignedToTask(task: Task, user: UserAccount | null): bool
   if (!user) return false;
 
   const userFullName = `${user.firstName} ${user.lastName}`.toLowerCase().trim();
+  const userFullWithMiddle = user.middleInitial
+    ? `${user.firstName} ${user.middleInitial} ${user.lastName}`
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .trim()
+    : '';
   const assigned = (task.assignedTo || '').toLowerCase().trim();
 
   // 1. Direct full name or suffix-aware comma-separated multi-assignee match
-  const assigneeList = splitAssigneeNames(task.assignedTo).map((s) => s.toLowerCase());
-  if (assigned === userFullName || assigneeList.includes(userFullName)) return true;
-
-  // 2. Direct email match
-  if (task.assignedUserEmail && task.assignedUserEmail.toLowerCase() === user.email.toLowerCase()) {
+  const assigneeList = splitAssigneeNames(task.assignedTo).map((s) =>
+    s.replace(/\s*\([^)]*\)\s*/g, '').toLowerCase().trim()
+  );
+  if (
+    assigned === userFullName ||
+    assigneeList.includes(userFullName) ||
+    (userFullWithMiddle && assigneeList.includes(userFullWithMiddle))
+  ) {
     return true;
   }
 
-  // 3. User's last name & first name both present in any assignee entry
+  // 2. Direct email match
+  if (
+    task.assignedUserEmail &&
+    user.email &&
+    task.assignedUserEmail.toLowerCase().trim() === user.email.toLowerCase().trim()
+  ) {
+    return true;
+  }
+
+  // 3. User's last name & first name both present in the same individual assignee entry
   const first = user.firstName.toLowerCase().trim();
   const last = user.lastName.toLowerCase().trim();
   if (
     first.length > 1 &&
     last.length > 1 &&
-    (assigneeList.some((entry) => entry.includes(first) && entry.includes(last)) ||
-      (assigned.includes(last) && assigned.includes(first)))
+    assigneeList.some((entry) => entry.includes(first) && entry.includes(last))
   ) {
     return true;
   }
 
-  // 4. Exact username match in assigned string
+  // 4. Exact username match in assigned list
   if (user.username && assigneeList.includes(user.username.toLowerCase().trim())) {
     return true;
   }

@@ -345,9 +345,13 @@ export default function App() {
     setSelectedRegion(defaultRegionFilter);
   }, [defaultRegionFilter]);
 
-  // Ensure non-superadmin users never stay on the SYSTEM_CONFIG workspace module
+  // Ensure non-admin users never stay on the SYSTEM_CONFIG workspace module
   useEffect(() => {
-    if (activeWorkspaceModule === 'SYSTEM_CONFIG' && currentUser?.role !== 'SUPERADMIN') {
+    if (
+      activeWorkspaceModule === 'SYSTEM_CONFIG' &&
+      currentUser?.role !== 'SUPERADMIN' &&
+      currentUser?.role !== 'ADMIN'
+    ) {
       setActiveWorkspaceModule('TASKS');
     }
   }, [activeWorkspaceModule, currentUser?.role]);
@@ -359,7 +363,11 @@ export default function App() {
     setSessionLogoutReason(null);
     setCurrentUserState(user);
     setActiveView('MY_TASKS');
-    if (user.role !== 'SUPERADMIN' && activeWorkspaceModule === 'SYSTEM_CONFIG') {
+    if (
+      user.role !== 'SUPERADMIN' &&
+      user.role !== 'ADMIN' &&
+      activeWorkspaceModule === 'SYSTEM_CONFIG'
+    ) {
       setActiveWorkspaceModule('TASKS');
     }
     showToast(`Welcome back, ${user.firstName} ${user.lastName}! Access granted.`);
@@ -454,50 +462,25 @@ export default function App() {
     });
   }, [tasks, currentUser, allowedRegions]);
 
-  // View 1: My Tasks (Tasks assigned to, created by, or requiring action from the current user)
+  // View 1: My Tasks (Strictly tasks directly assigned to or created by the current user)
   const myTasks = useMemo(() => {
     if (!currentUser) return jurisdictionTasks;
     return jurisdictionTasks.filter((task) => {
       return (
         isUserAssignedToTask(task, currentUser) ||
-        isUserCreatedTask(task, currentUser) ||
-        isTaskRequiringUserAction(task, currentUser)
+        isUserCreatedTask(task, currentUser)
       );
     });
   }, [jurisdictionTasks, currentUser]);
 
-  // View 2: Tasks to Receive (Dispatched tasks awaiting receipt by the authorized recipient)
+  // View 2: Tasks to Receive (Strictly unreceived Open tasks directly assigned to the current user)
   const tasksToReceive = useMemo(() => {
-    if (!currentUser) return jurisdictionTasks.filter((t) => t.status === 'Open' && !t.receivedAt);
+    if (!currentUser) return [];
     return jurisdictionTasks.filter((task) => {
-      // Must be awaiting receipt
       if (task.status !== 'Open' || task.receivedAt) return false;
-
-      // Direct assignee can always see & receive
-      if (isUserAssignedToTask(task, currentUser)) return true;
-
-      // For standard staff: in their regional/central office
-      if (currentUser.role === 'STANDARD' || (currentUser.role as string) === 'RANK_AND_FILE') {
-        return doesRegionMatch(task.region, currentUser.office);
-      }
-
-      // For regional supervisor: tasks in their regional office
-      if (currentUser.role === 'REGIONAL_SUPERVISOR') {
-        return doesRegionMatch(task.region, currentUser.office);
-      }
-
-      // For Cluster Director: tasks in cluster regions
-      if (currentUser.role === 'CLUSTER_DIRECTOR') {
-        return (
-          doesRegionMatch(task.region, currentUser.office) ||
-          allowedRegions.some((ar) => doesRegionMatch(task.region, ar))
-        );
-      }
-
-      // For Admin / Superadmin: all dispatched tasks awaiting receipt in jurisdiction
-      return true;
+      return isUserAssignedToTask(task, currentUser);
     });
-  }, [jurisdictionTasks, currentUser, allowedRegions]);
+  }, [jurisdictionTasks, currentUser]);
 
   // View 3: All Tasks (Tasks visible according to the user's existing role and jurisdiction)
   const allTasks = jurisdictionTasks;
@@ -819,12 +802,13 @@ export default function App() {
           totalTasksCount={allTasks.length}
           tasksToReceiveCount={tasksToReceive.length}
           fisConnectionMode={fisConnectionMode}
-          isSuperAdmin={currentUser.role === 'SUPERADMIN'}
+          isSuperAdmin={currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN'}
         />
 
         {/* Main Body */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6 min-w-0">
-          {activeWorkspaceModule === 'SYSTEM_CONFIG' && currentUser.role === 'SUPERADMIN' ? (
+          {activeWorkspaceModule === 'SYSTEM_CONFIG' &&
+          (currentUser.role === 'SUPERADMIN' || currentUser.role === 'ADMIN') ? (
             <SystemConfigModule
               currentUser={currentUser}
               onShowToast={showToast}
@@ -892,12 +876,13 @@ export default function App() {
                 scopeLabel={scopeLabel}
               />
 
-              {/* Task List (matching screenshot 1 with Receive button and details drawer trigger) */}
+              {/* Task List (Modern Table + Kanban Board on Desktop, Streamlined Card Feed on Mobile) */}
               <TaskList
                 tasks={filteredTasks}
                 onSelectTask={(task) => setSelectedTask(task)}
                 selectedTaskId={selectedTask?.id}
                 onReceiveTask={handlePromptReceiveTask}
+                currentUser={currentUser}
                 currentUserName={`${currentUser.firstName} ${currentUser.lastName}`}
                 activeView={activeView}
               />

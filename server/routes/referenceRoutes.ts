@@ -108,11 +108,11 @@ router.get('/config', async (_req, res) => {
   res.json(cfg);
 });
 
-// PUT /api/references/config - updates global dynamic dropdown configurations (SUPERADMIN only)
+// PUT /api/references/config - updates global dynamic dropdown configurations (SUPERADMIN & ADMIN)
 router.put(
   '/config',
   authenticateToken,
-  requireRoles('SUPERADMIN'),
+  requireRoles('SUPERADMIN', 'ADMIN'),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { categories, origins, outcomes, positions, offices } = req.body || {};

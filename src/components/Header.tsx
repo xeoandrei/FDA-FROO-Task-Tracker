@@ -570,7 +570,7 @@ export const Header: React.FC<HeaderProps> = ({
                     />
                   </button>
 
-                  {currentUser?.role === 'SUPERADMIN' && (
+                  {isAdminOrSuper && (
                     <button
                       type="button"
                       onClick={() => runMobileMenuAction(() => onSelectWorkspaceModule('SYSTEM_CONFIG'))}
